@@ -1,260 +1,683 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Service Vehicle Inventory</title>
-  <script src="https://cdn.jsdelivr.net/npm/dexie@3.2.3/dist/dexie.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
-  <script src="https://unpkg.com/html5-qrcode"></script>
-  <style>
-    body { font-family: Arial, sans-serif; padding: 10px; }
-    button { margin: 5px; padding: 10px; }
-    .section { margin-top: 20px; }
-  </style>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Service Vehicle Inventory</title>
+
+<!-- Libraries -->
+<script src="https://unpkg.com/html5-qrcode@2.3.7/minified/html5-qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
+
+<style>
+  :root{ --accent:#e11d48; --muted:#6b7280; --card:#fff; --bg:#f3f4f6; --danger:#b91c1c; }
+  body{ font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial; margin:0; background:var(--bg); color:#111; }
+  header{ background:#0f172a; color:white; padding:12px 16px; display:flex; align-items:center; justify-content:space-between; }
+  header h1{ margin:0; font-size:18px; }
+  #badge{ width:10px; height:10px; background:var(--accent); border-radius:50%; display:inline-block; margin-left:8px; vertical-align:middle; }
+  nav{ display:flex; gap:6px; padding:10px; justify-content:center; }
+  nav button{ flex:1; max-width:200px; padding:10px 12px; border-radius:10px; border:none; background:white; box-shadow:0 1px 2px rgba(0,0,0,0.06); cursor:pointer; }
+  nav button.active{ background:linear-gradient(180deg,#fff,#f8fafc); box-shadow:0 2px 6px rgba(0,0,0,0.08); }
+  main{ padding:14px; max-width:900px; margin:0 auto; }
+  .big{ display:block; width:100%; padding:18px; font-size:18px; border-radius:12px; background:var(--accent); color:white; border:none; }
+  .muted-btn{ display:block; width:100%; padding:14px; font-size:16px; border-radius:10px; background:#111827; color:white; border:none; margin-top:10px; }
+  .card{ background:var(--card); padding:12px; border-radius:12px; margin:10px 0; box-shadow:0 1px 3px rgba(0,0,0,0.04); }
+  .group-item{ display:flex; justify-content:space-between; align-items:center; padding:10px; cursor:pointer; border-radius:8px; }
+  .part-row{ display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px dashed #eee; }
+  .part-row:last-child{ border-bottom: none; }
+  .small{ font-size:13px; color:var(--muted); }
+  .small-button{ padding:6px 10px; border-radius:8px; border:none; background:#f3f4f6; cursor:pointer; }
+  .danger{ background:var(--danger); color:white; border:none; padding:8px 10px; border-radius:8px; }
+  #qrModal{ position:fixed; inset:0; background:white; display:none; align-items:center; justify-content:center; flex-direction:column; z-index:9999; }
+  #qrModal canvas{ width:78vw; height:78vw; max-width:420px; max-height:420px; }
+  #qrModal .qrLabel{ margin-top:10px; font-size:20px; font-weight:bold; text-align:center; }
+  #scannerContainer{ width:100%; max-width:640px; margin:0 auto; }
+  footer{ padding:14px; font-size:13px; color:var(--muted); text-align:center; }
+  .helper{ color:var(--muted); font-size:13px; margin-top:6px; }
+  .controls{ display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; }
+  .hidden{ display:none!important; }
+</style>
 </head>
 <body>
+
+<header>
   <h1>Service Vehicle Inventory</h1>
+  <div id="settingsIndicator" title="Settings backup reminder" class="hidden"><span id="badge"></span></div>
+</header>
 
-  <div id="nav">
-    <button onclick="showSection('groups')">Groups</button>
-    <button onclick="showSection('parts')">Parts</button>
-    <button onclick="showSection('scan')">Scan</button>
-    <button onclick="showSection('restock')">Restock</button>
-  </div>
+<nav>
+  <button id="homeNav" class="active" onclick="showTab('home')">Home</button>
+  <button id="groupsNav" onclick="showTab('groups')">Groups</button>
+  <button id="restockNav" onclick="showTab('restock')">Restock</button>
+  <button id="settingsNav" onclick="showTab('settings')">Settings <span id="settingsDot" class="hidden" style="margin-left:8px; color:var(--accent)">●</span></button>
+</nav>
 
-  <div id="groups" class="section">
-    <h2>Groups</h2>
-    <input id="groupName" placeholder="New Group Name">
-    <button onclick="addGroup()">Add Group</button>
-    <ul id="groupList"></ul>
-    <hr>
-    <button onclick="exportData()">📤 Export Data</button>
-    <input type="file" id="importFile" style="display:none" onchange="importData(event)">
-    <button onclick="document.getElementById('importFile').click()">📥 Import Data</button>
-  </div>
+<main id="main">
+  <!-- HOME -->
+  <section id="home" class="card">
+    <button class="big" onclick="startScanner()">🔍 Scan QR Code</button>
+    <button class="muted-btn" onclick="showTab('groups')">📂 Browse Groups Manually</button>
+    <div class="helper">Tip: add to your home screen for quick access.</div>
+  </section>
 
-  <div id="parts" class="section" style="display:none">
-    <h2>Parts</h2>
-    <input id="partName" placeholder="Part Name">
-    <input id="partMaxQty" type="number" placeholder="Max Qty">
-    <select id="partGroup"></select>
-    <button onclick="addPart()">Add Part</button>
-    <ul id="partList"></ul>
-  </div>
+  <!-- GROUPS -->
+  <section id="groups" class="hidden">
+    <div style="display:flex; gap:8px; align-items:center;">
+      <input id="newGroupName" placeholder="New group name" style="flex:1; padding:8px; border-radius:8px; border:1px solid #e5e7eb" />
+      <button class="small-button" onclick="addGroup()">Add Group</button>
+    </div>
+    <div id="groupsList" style="margin-top:12px"></div>
+  </section>
 
-  <div id="scan" class="section" style="display:none">
-    <h2>Scan QR</h2>
-    <div id="reader" style="width:300px;"></div>
-    <div id="scanResult"></div>
-  </div>
+  <!-- GROUP DETAILS (dynamic) -->
+  <section id="groupDetails" class="hidden card">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <h2 id="groupTitle">Group</h2>
+      <div>
+        <button class="small-button" onclick="showQRCodeForCurrent()">🖨 Show QR Code</button>
+        <button class="small-button" onclick="showTab('groups')">⬅ Back</button>
+      </div>
+    </div>
 
-  <div id="restock" class="section" style="display:none">
+    <div id="partsContainer" style="margin-top:12px"></div>
+
+    <div class="controls">
+      <button onclick="openAddPart()" class="small-button">➕ Add Part</button>
+      <button onclick="replenishGroup()" class="small-button">🔄 Replenish (Group)</button>
+    </div>
+  </section>
+
+  <!-- RESTOCK -->
+  <section id="restock" class="hidden card">
     <h2>Restock List</h2>
-    <ul id="restockList"></ul>
-    <button onclick="clearRestock()">Clear Restock List</button>
-    <button onclick="replenishStock()">Replenish Stock</button>
+    <div id="restockListArea"></div>
+    <div class="controls" style="margin-top:12px;">
+      <button onclick="clearRestock()" class="small-button">Clear Restock</button>
+      <button onclick="replenishAll()" class="small-button">Replenish All (reset to max)</button>
+    </div>
+  </section>
+
+  <!-- SETTINGS -->
+  <section id="settings" class="hidden card">
+    <h2>Admin / Backup</h2>
+
+    <div style="margin-top:10px;">
+      <button onclick="exportCSV()" class="small-button">📤 Export CSV</button>
+      <div class="helper">Download groups & parts (for Excel)</div>
+    </div>
+
+    <div style="margin-top:10px;">
+      <input id="importCsvInput" type="file" accept=".csv" class="hidden" onchange="importCSV(event)">
+      <button onclick="document.getElementById('importCsvInput').click()" class="small-button">📥 Import CSV</button>
+      <div class="helper">Replace all data from a CSV file (wipe & rebuild)</div>
+    </div>
+
+    <div style="margin-top:10px;">
+      <button onclick="exportJSON()" class="small-button">📤 Export JSON (Backup)</button>
+      <div class="helper">Download a full JSON backup</div>
+    </div>
+
+    <div style="margin-top:10px;">
+      <input id="importJsonInput" type="file" accept=".json" class="hidden" onchange="importJSON(event)">
+      <button onclick="document.getElementById('importJsonInput').click()" class="small-button">📥 Import JSON (Restore)</button>
+      <div class="helper">Restore full backup (wipe & restore)</div>
+    </div>
+
+    <div style="margin-top:14px;">
+      <button onclick="clearAllData()" class="danger">🗑 Clear All Data</button>
+      <div class="helper">Double confirmation required. Use with caution.</div>
+    </div>
+  </section>
+</main>
+
+<!-- QR full-screen modal -->
+<div id="qrModal" style="display:none; position:fixed; inset:0; background:white; z-index:9999; align-items:center; justify-content:center; flex-direction:column;">
+  <div id="qrCanvasWrap" style="text-align:center;"></div>
+  <div id="qrNameLabel" style="margin-top:12px; font-size:20px; font-weight:700; text-align:center;"></div>
+  <button onclick="closeQRModal()" style="margin-top:16px; background:var(--accent); color:white; border:none; padding:10px 14px; border-radius:8px;">Close</button>
+</div>
+
+<!-- Scanner area (will be injected on demand) -->
+<div id="scannerModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.75); z-index:9999; align-items:center; justify-content:center; flex-direction:column;">
+  <div id="scannerContainer" style="width:92%; max-width:680px; background:white; padding:12px; border-radius:10px;">
+    <div id="qr-reader" style="width:100%"></div>
+    <div style="margin-top:8px; display:flex; gap:8px; justify-content:space-between;">
+      <button onclick="stopScanner()" style="flex:1; padding:10px; border-radius:8px;">Cancel</button>
+      <button id="scannerFlashBtn" onclick="toggleTorch()" style="flex:1; padding:10px; border-radius:8px;">Toggle Flash</button>
+    </div>
   </div>
+</div>
 
-  <script>
-    const db = new Dexie("InventoryDB");
-    db.version(2).stores({
-      groups: "++id,name",
-      parts: "++id,name,quantity,maxQuantity,groupId",
-      restock: "++id,name,quantity"
+<footer>Made for single-user offline use. Data stored locally in your browser.</footer>
+
+<script>
+/* ------------------------------
+  Data model & persistence
+   - groups: array of { id, name, parts: [{id,name,current,max}] }
+   - restock: array of { name, qty }
+   - lastBackup: timestamp in localStorage
+--------------------------------*/
+const LS_KEY = 'svc_inventory_v1';
+const LS_BACKUP = 'svc_inventory_last_backup';
+
+let state = {
+  groups: [],
+  restock: []
+};
+
+// helper for unique IDs
+function genId(prefix='id'){ return prefix + '_' + Math.random().toString(36).slice(2,9); }
+
+// load from storage
+function loadState(){
+  try{
+    const raw = localStorage.getItem(LS_KEY);
+    if(raw) state = JSON.parse(raw);
+    else {
+      // initial demo if empty (optional)
+      // state.groups = [{id:genId('g'), name:'Toolbox Drawer 1', parts:[{id:genId('p'), name:'Bolts', current:45, max:50},{id:genId('p'), name:'Wrench', current:3, max:3}]}];
+      saveState();
+    }
+  } catch(e){
+    console.error('Load state failed', e);
+  }
+}
+function saveState(){
+  localStorage.setItem(LS_KEY, JSON.stringify(state));
+  updateRestockBadge();
+}
+
+/* ------------------------------
+  Tab navigation
+--------------------------------*/
+function showTab(tab){
+  document.querySelectorAll('main section').forEach(s=>s.classList.add('hidden'));
+  document.getElementById(tab).classList.remove('hidden');
+  document.querySelectorAll('nav button').forEach(b=>b.classList.remove('active'));
+  if(tab === 'home') document.getElementById('homeNav').classList.add('active');
+  if(tab === 'groups') document.getElementById('groupsNav').classList.add('active');
+  if(tab === 'restock') document.getElementById('restockNav').classList.add('active');
+  if(tab === 'settings'){
+    document.getElementById('settingsNav').classList.add('active');
+    onOpenSettings();
+  }
+  // special: groupDetails will be shown by showGroup()
+}
+
+/* ------------------------------
+  Groups & Parts UI
+--------------------------------*/
+function renderGroupsList(){
+  const el = document.getElementById('groupsList');
+  el.innerHTML = '';
+  state.groups.forEach((g, idx)=>{
+    const wrapper = document.createElement('div');
+    wrapper.className='card group-item';
+    wrapper.style.marginBottom='8px';
+    const left = document.createElement('div');
+    left.innerHTML = `<div style="font-weight:600">${g.name}</div><div class="small">${g.parts.length} parts</div>`;
+    const right = document.createElement('div');
+    const openBtn = document.createElement('button'); openBtn.textContent='Open'; openBtn.className='small-button';
+    openBtn.onclick = ()=> showGroup(idx);
+    const qrBtn = document.createElement('button'); qrBtn.textContent='QR'; qrBtn.className='small-button';
+    qrBtn.onclick = (e)=>{ e.stopPropagation(); showQRCode(g.id); };
+    right.appendChild(qrBtn); right.appendChild(openBtn);
+    wrapper.appendChild(left); wrapper.appendChild(right);
+    wrapper.onclick = ()=> showGroup(idx);
+    el.appendChild(wrapper);
+  });
+}
+
+/* Add Group */
+function addGroup(){
+  const name = (document.getElementById('newGroupName').value || '').trim();
+  if(!name){ alert('Enter a group name first'); return; }
+  const g = { id: genId('g'), name, parts: [] };
+  state.groups.push(g);
+  document.getElementById('newGroupName').value = '';
+  saveState();
+  renderGroupsList();
+}
+
+/* Show group details */
+let currentGroupIndex = null;
+function showGroup(index){
+  currentGroupIndex = index;
+  const g = state.groups[index];
+  document.getElementById('groupTitle').textContent = g.name;
+  // build parts list
+  const container = document.getElementById('partsContainer');
+  container.innerHTML = '';
+  if(g.parts.length === 0){
+    container.innerHTML = '<div class="small">No parts yet</div>';
+  } else {
+    g.parts.forEach((p, pi)=>{
+      const row = document.createElement('div');
+      row.className = 'part-row';
+      const left = document.createElement('div');
+      left.innerHTML = `<div style="font-weight:600">${p.name}</div><div class="small">${p.current} / ${p.max}</div>`;
+      const right = document.createElement('div');
+      const useBtn = document.createElement('button'); useBtn.textContent = 'Use'; useBtn.className='small-button';
+      useBtn.onclick = ()=> { usePart(index, pi); };
+      const editBtn = document.createElement('button'); editBtn.textContent='Edit'; editBtn.className='small-button';
+      editBtn.onclick = ()=> { editPart(index, pi); };
+      right.appendChild(useBtn); right.appendChild(editBtn);
+      row.appendChild(left); row.appendChild(right);
+      container.appendChild(row);
     });
+  }
+  showTab('groupDetails');
+}
 
-    function showSection(id) {
-      document.querySelectorAll('.section').forEach(sec => sec.style.display='none');
-      document.getElementById(id).style.display='block';
-      if(id==='groups') loadGroups();
-      if(id==='parts') loadParts();
-      if(id==='restock') loadRestock();
-      if(id==='scan') startScanner();
+/* Add Part to current group (via prompt) */
+function openAddPart(){
+  if(currentGroupIndex === null) return alert('Open a group first');
+  const name = prompt('Part name:');
+  if(!name) return;
+  const max = parseInt(prompt('Max quantity (full stock):','10'),10);
+  if(isNaN(max) || max<=0) return alert('Invalid max number');
+  const part = { id: genId('p'), name, current: max, max };
+  state.groups[currentGroupIndex].parts.push(part);
+  saveState();
+  showGroup(currentGroupIndex);
+}
+
+/* Edit part (change name/max/current) */
+function editPart(gIdx, pIdx){
+  const part = state.groups[gIdx].parts[pIdx];
+  const newName = prompt('Part name:', part.name);
+  if(!newName) return;
+  const newMax = parseInt(prompt('Max quantity:', part.max),10);
+  if(isNaN(newMax) || newMax<=0) return alert('Invalid max');
+  let newCurrent = parseInt(prompt('Current quantity:', part.current),10);
+  if(isNaN(newCurrent) || newCurrent < 0) newCurrent = part.current;
+  part.name = newName;
+  part.max = newMax;
+  part.current = Math.min(newMax, newCurrent);
+  saveState();
+  showGroup(gIdx);
+}
+
+/* Use part: decrement and add to restock (aggregated) with immediate undo option */
+function usePart(gIdx, pIdx){
+  const part = state.groups[gIdx].parts[pIdx];
+  const qty = parseInt(prompt('How many used?', '1'),10);
+  if(isNaN(qty) || qty <= 0) return;
+  if(qty > part.current){ return alert('Not enough in stock'); }
+  part.current -= qty;
+
+  // aggregate restock (by name)
+  const existing = state.restock.find(r => r.name === part.name);
+  if(existing) existing.qty += qty;
+  else state.restock.push({ name: part.name, qty });
+
+  saveState();
+  showGroup(gIdx);
+  renderRestock();
+
+  // immediate undo prompt
+  if(confirm(`Used ${qty} x ${part.name}. Undo?`)){
+    // undo: restore qty to same part instance (by id)
+    part.current += qty;
+    const r = state.restock.find(r => r.name === part.name);
+    if(r){
+      r.qty -= qty;
+      if(r.qty <= 0) state.restock = state.restock.filter(x => x !== r);
     }
+    saveState();
+    showGroup(gIdx);
+    renderRestock();
+  }
+}
 
-    async function addGroup(){
-      const name=document.getElementById('groupName').value;
-      if(!name) return;
-      await db.groups.add({name});
-      document.getElementById('groupName').value='';
-      loadGroups();
-    }
+/* ------------------------------
+  Restock UI & actions
+--------------------------------*/
+function renderRestock(){
+  const area = document.getElementById('restockListArea');
+  area.innerHTML = '';
+  if(state.restock.length === 0){
+    area.innerHTML = '<div class="small">No items to restock.</div>';
+    return;
+  }
+  state.restock.forEach(item=>{
+    const row = document.createElement('div');
+    row.className='card';
+    row.innerHTML = `<div style="display:flex; justify-content:space-between;"><div><strong>${item.name}</strong><div class="small">Used: ${item.qty}</div></div></div>`;
+    area.appendChild(row);
+  });
+}
 
-    async function loadGroups(){
-      const groups=await db.groups.toArray();
-      const ul=document.getElementById('groupList');
-      ul.innerHTML='';
-      const select=document.getElementById('partGroup');
-      select.innerHTML='';
-      groups.forEach(g=>{
-        const li=document.createElement('li');
-        li.textContent=g.name;
-        const qrBtn=document.createElement('button');
-        qrBtn.textContent='QR';
-        qrBtn.onclick=()=>showQR(g.id);
-        li.appendChild(qrBtn);
-        ul.appendChild(li);
-        const opt=document.createElement('option');
-        opt.value=g.id; opt.textContent=g.name;
-        select.appendChild(opt);
-      });
-    }
+/* Clear restock list */
+function clearRestock(){
+  if(!confirm('Clear restock list?')) return;
+  state.restock = [];
+  saveState();
+  renderRestock();
+}
 
-    async function showQR(groupId){
-      const url=location.href.split('#')[0]+`#group-${groupId}`;
-      const canvas=document.createElement('canvas');
-      QRCode.toCanvas(canvas,url); 
-      const w=window.open('');
-      w.document.body.appendChild(canvas);
-    }
+/* Replenish current group back to max */
+function replenishGroup(){
+  if(currentGroupIndex === null) return;
+  const g = state.groups[currentGroupIndex];
+  g.parts.forEach(p => p.current = p.max);
+  // remove restock entries belonging to this group's parts
+  g.parts.forEach(p => {
+    state.restock = state.restock.filter(r => r.name !== p.name);
+  });
+  saveState();
+  showGroup(currentGroupIndex);
+  renderRestock();
+}
 
-    async function addPart(){
-      const name=document.getElementById('partName').value;
-      const maxQty=parseInt(document.getElementById('partMaxQty').value);
-      const groupId=parseInt(document.getElementById('partGroup').value);
-      if(!name||!maxQty||!groupId) return;
-      await db.parts.add({name,quantity:maxQty,maxQuantity:maxQty,groupId});
-      document.getElementById('partName').value='';
-      document.getElementById('partMaxQty').value='';
-      loadParts();
-    }
+/* Replenish all groups & clear restock list */
+function replenishAll(){
+  state.groups.forEach(g => g.parts.forEach(p => p.current = p.max));
+  state.restock = [];
+  saveState();
+  renderRestock();
+  if(currentGroupIndex !== null) showGroup(currentGroupIndex);
+}
 
-    async function loadParts(){
-      const parts=await db.parts.toArray();
-      const groups=await db.groups.toArray();
-      const ul=document.getElementById('partList');
-      ul.innerHTML='';
-      parts.forEach(p=>{
-        const li=document.createElement('li');
-        const g=groups.find(gr=>gr.id===p.groupId);
-        li.textContent=`${p.name} (${p.quantity}/${p.maxQuantity}) - ${g?g.name:''}`;
-        const useBtn=document.createElement('button');
-        useBtn.textContent='Use';
-        useBtn.onclick=()=>usePart(p.id);
-        li.appendChild(useBtn);
-        ul.appendChild(li);
-      });
-    }
+/* ------------------------------
+  QR generation & scanning
+--------------------------------*/
+let lastScanner = null;
+let torchOn = false;
 
-    async function usePart(id){
-      const part=await db.parts.get(id);
-      let useQty=parseInt(prompt("How many used?",1));
-      if(!useQty||useQty<1) return;
-      if(part.quantity<useQty){alert("Not enough in stock");return;}
-      part.quantity-=useQty;
-      await db.parts.put(part);
-      let existing=await db.restock.where('name').equals(part.name).first();
-      if(existing){
-        existing.quantity+=useQty;
-        await db.restock.put(existing);
-      } else {
-        await db.restock.add({name:part.name,quantity:useQty});
-      }
-      if(confirm("Undo this action?")){
-        part.quantity+=useQty;
-        await db.parts.put(part);
-        existing=await db.restock.where('name').equals(part.name).first();
-        if(existing){
-          existing.quantity-=useQty;
-          if(existing.quantity<=0) await db.restock.delete(existing.id);
-          else await db.restock.put(existing);
+function showQRCode(groupId){
+  const group = state.groups.find(g => g.id === groupId);
+  if(!group) return alert('Group not found');
+  // value encoded: groupId (safer than name)
+  const value = 'INV-GROUP:' + group.id;
+  const canvasWrap = document.getElementById('qrCanvasWrap');
+  canvasWrap.innerHTML = '';
+  const canvas = document.createElement('canvas');
+  canvasWrap.appendChild(canvas);
+  // QRCode.toCanvas from qrcode lib
+  QRCode.toCanvas(canvas, value, { width: 512 }, function (err) {
+    if (err) console.error(err);
+  });
+  document.getElementById('qrNameLabel').textContent = group.name;
+  document.getElementById('qrModal').style.display = 'flex';
+}
+
+function showQRCodeForCurrent(){
+  if(currentGroupIndex === null) return alert('No group open');
+  showQRCode(state.groups[currentGroupIndex].id);
+}
+
+function closeQRModal(){
+  document.getElementById('qrModal').style.display = 'none';
+}
+
+/* Scanner modal control */
+async function startScanner(){
+  // if no groups -> warn
+  if(state.groups.length === 0){ if(!confirm('No groups exist. Create one?')) return; showTab('groups'); return; }
+
+  document.getElementById('scannerModal').style.display = 'flex';
+  const html5QrCode = new Html5Qrcode(/* element id */ "qr-reader", /* verbose= */ { verbose: false } );
+  lastScanner = html5QrCode;
+
+  try{
+    await html5QrCode.start(
+      { facingMode: "environment" },
+      { fps: 10, qrbox: { width: 300, height: 300 } },
+      qrCodeMessage => {
+        // expect format: INV-GROUP:<groupId>
+        if(qrCodeMessage && qrCodeMessage.startsWith('INV-GROUP:')){
+          const gid = qrCodeMessage.split(':')[1];
+          const idx = state.groups.findIndex(g => g.id === gid);
+          if(idx >= 0){
+            stopScanner();
+            showGroup(idx);
+            showTab('groupDetails');
+            return;
+          } else {
+            alert('Group scanned but not found in this library.');
+          }
+        } else {
+          // older behavior: allow scanning name if someone generated name-only QR
+          const idxByName = state.groups.findIndex(g => g.name === qrCodeMessage);
+          if(idxByName >= 0){
+            stopScanner();
+            showGroup(idxByName);
+            showTab('groupDetails');
+            return;
+          } else {
+            alert('Scanned value not recognized: ' + qrCodeMessage);
+          }
         }
+      },
+      errorMessage => {
+        // optional: console.log('QR error', errorMessage);
       }
-      loadParts();
-      loadRestock();
-    }
+    );
+  } catch(err){
+    console.error('Scanner start error', err);
+    alert('Could not start camera. If you are testing locally (file://) the browser may block camera access. Host the file via https (GitHub Pages) for camera to work.');
+    document.getElementById('scannerModal').style.display = 'none';
+  }
+}
 
-    async function loadRestock(){
-      const items=await db.restock.toArray();
-      const ul=document.getElementById('restockList');
-      ul.innerHTML='';
-      items.forEach(i=>{
-        const li=document.createElement('li');
-        li.textContent=`${i.name} - ${i.quantity}`;
-        ul.appendChild(li);
-      });
-    }
+function stopScanner(){
+  if(lastScanner){
+    lastScanner.stop().then(() => {
+      lastScanner.clear(); lastScanner = null;
+      document.getElementById('scannerModal').style.display = 'none';
+    }).catch(err => {
+      console.warn('stop error', err);
+      document.getElementById('scannerModal').style.display = 'none';
+    });
+  } else {
+    document.getElementById('scannerModal').style.display = 'none';
+  }
+}
 
-    async function clearRestock(){
-      await db.restock.clear();
-      loadRestock();
-    }
+async function toggleTorch(){
+  if(!lastScanner) return;
+  // html5-qrcode has limited torch support; the library toggles via getCapabilities if supported
+  try {
+    torchOn = !torchOn;
+    await lastScanner.applyVideoConstraints({ advanced: [{ torch: torchOn }] });
+  } catch(e){
+    alert('Torch toggle not supported on this device/browser.');
+  }
+}
 
-    async function replenishStock(){
-      const items=await db.restock.toArray();
-      for(const item of items){
-        const part=await db.parts.where('name').equals(item.name).first();
-        if(part){
-          part.quantity=part.maxQuantity;
-          await db.parts.put(part);
-        }
+/* ------------------------------
+  CSV & JSON import/export
+--------------------------------*/
+function exportCSV(){
+  // columns: Group Name, Part Name, Max Quantity, Current Quantity
+  const rows = [['Group Name','Part Name','Max Quantity','Current Quantity']];
+  state.groups.forEach(g=>{
+    g.parts.forEach(p=>{
+      rows.push([g.name, p.name, p.max, p.current]);
+    });
+  });
+  const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\r\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = 'inventory_library.csv'; a.click(); URL.revokeObjectURL(url);
+}
+
+function importCSV(event){
+  const input = document.getElementById('importCsvInput');
+  const file = input.files[0];
+  if(!file) return;
+  if(!confirm('This will replace all current data. Continue?')) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const text = e.target.result;
+    const lines = text.split(/\r?\n/).filter(Boolean);
+    if(lines.length <= 1) return alert('CSV empty or malformed');
+    // simple parser: handle quoted fields
+    const parseLine = (ln) => {
+      const res=[]; let cur=''; let inQ=false;
+      for(let i=0;i<ln.length;i++){
+        const ch = ln[i];
+        if(ch === '"' ){ inQ = !inQ; continue; }
+        if(ch === ',' && !inQ){ res.push(cur); cur=''; continue; }
+        cur += ch;
       }
-      await db.restock.clear();
-      loadParts();
-      loadRestock();
-    }
-
-    function startScanner(){
-      const html5QrCode = new Html5Qrcode("reader");
-      Html5Qrcode.getCameras().then(devices => {
-        if(devices && devices.length) {
-          html5QrCode.start(
-            { facingMode: "environment" },
-            { fps: 10, qrbox: 250 },
-            qrCodeMessage => {
-              document.getElementById("scanResult").innerText = qrCodeMessage;
-              html5QrCode.stop();
-            });
-        }
-      });
-    }
-
-    async function exportData(){
-      const groups=await db.groups.toArray();
-      const parts=await db.parts.toArray();
-      const restock=await db.restock.toArray();
-      const data={groups,parts,restock};
-      const blob=new Blob([JSON.stringify(data)],{type:"application/json"});
-      const url=URL.createObjectURL(blob);
-      const a=document.createElement('a');
-      a.href=url;a.download="inventory_backup.json";a.click();
-      localStorage.setItem('lastBackup', Date.now());
-    }
-
-    async function importData(event){
-      const file=event.target.files[0];
-      if(!file) return;
-      const text=await file.text();
-      const data=JSON.parse(text);
-      await db.transaction('rw',db.groups,db.parts,db.restock,async()=>{
-        await db.groups.clear();
-        await db.parts.clear();
-        await db.restock.clear();
-        await db.groups.bulkAdd(data.groups);
-        await db.parts.bulkAdd(data.parts);
-        await db.restock.bulkAdd(data.restock);
-      });
-      loadGroups();
-      loadParts();
-      loadRestock();
-    }
-
-    function checkBackupReminder(){
-      const last=localStorage.getItem('lastBackup');
-      if(!last) return;
-      const daysSince=(Date.now()-parseInt(last))/(1000*60*60*24);
-      if(daysSince>=7){
-        if(confirm(`It’s been ${Math.floor(daysSince)} days since your last backup. Export now?`)){
-          exportData();
-        }
+      res.push(cur);
+      return res.map(s => s.trim());
+    };
+    const headers = parseLine(lines[0]).map(h => h.toLowerCase());
+    const idxGroup = headers.indexOf('group name'), idxPart = headers.indexOf('part name'), idxMax = headers.indexOf('max quantity'), idxCur = headers.indexOf('current quantity');
+    if(idxGroup < 0 || idxPart < 0 || idxMax < 0) return alert('CSV must include Group Name, Part Name, Max Quantity columns');
+    // wipe and rebuild
+    const groupsMap = {};
+    const newGroups = [];
+    for(let i=1;i<lines.length;i++){
+      const row = parseLine(lines[i]);
+      if(row.length === 0) continue;
+      const gname = row[idxGroup] || 'Default';
+      const pname = row[idxPart] || '';
+      const maxQ = parseInt(row[idxMax]) || 0;
+      const curQ = (idxCur>=0 && row[idxCur] !== undefined && row[idxCur] !== '') ? parseInt(row[idxCur]) : maxQ;
+      if(!pname) continue;
+      if(!groupsMap[gname]){
+        const id = genId('g');
+        groupsMap[gname] = { id, name: gname, parts: [] };
+        newGroups.push(groupsMap[gname]);
       }
+      groupsMap[gname].parts.push({ id: genId('p'), name: pname, current: Math.min(curQ, maxQ), max: maxQ });
     }
+    state.groups = newGroups;
+    state.restock = [];
+    saveState();
+    showTab('groups');
+    renderAll();
+    alert('CSV import complete');
+    document.getElementById('importCsvInput').value = '';
+  };
+  reader.readAsText(file);
+}
 
-    window.onload=()=>{
-      showSection('groups');
-      setTimeout(checkBackupReminder,1000);
+function exportJSON(){
+  const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = 'inventory_backup.json'; a.click(); URL.revokeObjectURL(url);
+  // set backup timestamp and clear settings dot
+  localStorage.setItem(LS_BACKUP, Date.now().toString());
+  updateBackupBadge();
+}
+
+function importJSON(event){
+  const input = document.getElementById('importJsonInput');
+  const file = input.files[0];
+  if(!file) return;
+  if(!confirm('This will replace all current data. Continue?')) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try{
+      const obj = JSON.parse(e.target.result);
+      if(!obj || !Array.isArray(obj.groups)) return alert('Invalid JSON backup');
+      state = obj;
+      saveState();
+      renderAll();
+      alert('Import complete');
+      input.value = '';
+    } catch(err){ alert('Could not parse JSON'); }
+  };
+  reader.readAsText(file);
+}
+
+/* ------------------------------
+  Clear all data with double-confirm
+--------------------------------*/
+function clearAllData(){
+  if(!confirm('Are you sure you want to delete all groups, parts, and restock data? This cannot be undone.')) return;
+  const s = prompt('Type DELETE to confirm:');
+  if(s !== 'DELETE'){ alert('Confirmation failed'); return; }
+  state = { groups: [], restock: [] };
+  localStorage.removeItem(LS_KEY);
+  localStorage.removeItem(LS_BACKUP);
+  saveState();
+  renderAll();
+  alert('All data cleared');
+}
+
+/* ------------------------------
+  Backup reminder badge (7 days)
+--------------------------------*/
+function updateBackupBadge(){
+  const last = parseInt(localStorage.getItem(LS_BACKUP) || '0', 10);
+  if(!last){ // never backed up -> show dot
+    document.getElementById('settingsDot').classList.remove('hidden'); return;
+  }
+  const days = (Date.now() - last) / (1000*60*60*24);
+  if(days >= 7) document.getElementById('settingsDot').classList.remove('hidden');
+  else document.getElementById('settingsDot').classList.add('hidden');
+}
+
+function onOpenSettings(){
+  updateBackupBadge();
+  // if badge visible, show prompt
+  if(!document.getElementById('settingsDot').classList.contains('hidden')){
+    // popup: Back Up Now / Ignore
+    const doBackup = confirm("It's been 7+ days since your last JSON backup. Back Up Now? (OK=Back Up Now, Cancel=Ignore)");
+    if(doBackup){
+      exportJSON();
+      document.getElementById('settingsDot').classList.add('hidden');
+    } else {
+      // ignore -> reset timer
+      localStorage.setItem(LS_BACKUP, Date.now().toString());
+      document.getElementById('settingsDot').classList.add('hidden');
     }
-  </script>
+  }
+}
+
+/* ------------------------------
+  Render helpers & startup
+--------------------------------*/
+function renderAll(){
+  renderGroupsList();
+  renderRestock();
+  if(currentGroupIndex !== null) showGroup(currentGroupIndex);
+}
+
+function renderRestock(){ renderRestock(); } // placeholder - real is above
+function renderRestock(){ // overwrite to ensure available
+  const area = document.getElementById('restockListArea');
+  if(!area) return;
+  area.innerHTML = '';
+  if(!state.restock || state.restock.length === 0){
+    area.innerHTML = '<div class="small">No items to restock.</div>'; return;
+  }
+  state.restock.forEach(item=>{
+    const row = document.createElement('div');
+    row.className = 'card';
+    row.innerHTML = `<div style="display:flex; justify-content:space-between;"><div><strong>${item.name}</strong><div class="small">Used: ${item.qty}</div></div></div>`;
+    area.appendChild(row);
+  });
+}
+
+/* init */
+loadState();
+renderAll();
+updateBackupBadge();
+showTab('home');
+
+/* Expose CSV/JSON import handlers (wired to inputs) */
+window.importCSV = importCSV;
+window.importJSON = importJSON;
+
+/* Debug helper to preload sample data (optional)
+function preload(){
+  state.groups = [
+    { id: genId('g'), name: 'Toolbox A', parts: [{id:genId('p'), name:'Bolts', current:45, max:50}, {id:genId('p'), name:'Gasket', current:5, max:5}]},
+    { id: genId('g'), name: 'Drawer B', parts: [{id:genId('p'), name:'Relay', current:2, max:3}]}
+  ];
+  state.restock=[];
+  saveState();
+  renderAll();
+}
+*/
+</script>
 </body>
 </html>
