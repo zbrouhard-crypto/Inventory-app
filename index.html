@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Service Vehicle Inventory</title>
+  <script src="https://cdn.jsdelivr.net/npm/dexie@3.2.3/dist/dexie.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
+  <script src="https://unpkg.com/html5-qrcode"></script>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 10px; }
+    button { margin: 5px; padding: 10px; }
+    .section { margin-top: 20px; }
+  </style>
+</head>
+<body>
+  <h1>Service Vehicle Inventory</h1>
+
+  <div id="nav">
+    <button onclick="showSection('groups')">Groups</button>
+    <button onclick="showSection('parts')">Parts</button>
+    <button onclick="showSection('scan')">Scan</button>
+    <button onclick="showSection('restock')">Restock</button>
+  </div>
+
+  <div id="groups" class="section">
+    <h2>Groups</h2>
+    <input id="groupName" placeholder="New Group Name">
+    <button onclick="addGroup()">Add Group</button>
+    <ul id="groupList"></ul>
+    <hr>
+    <button onclick="exportData()">📤 Export Data</button>
+    <input type="file" id="importFile" style="display:none" onchange="importData(event)">
+    <button onclick="document.getElementById('importFile').click()">📥 Import Data</button>
+  </div>
+
+  <div id="parts" class="section" style="display:none">
+    <h2>Parts</h2>
+    <input id="partName" placeholder="Part Name">
+    <input id="partMaxQty" type="number" placeholder="Max Qty">
+    <select id="partGroup"></select>
+    <button onclick="addPart()">Add Part</button>
+    <ul id="partList"></ul>
+  </div>
+
+  <div id="scan" class="section" style="display:none">
+    <h2>Scan QR</h2>
+    <div id="reader" style="width:300px;"></div>
+    <div id="scanResult"></div>
+  </div>
+
+  <div id="restock" class="section" style="display:none">
+    <h2>Restock List</h2>
+    <ul id="restockList"></ul>
+    <button onclick="clearRestock()">Clear Restock List</button>
+    <button onclick="replenishStock()">Replenish Stock</button>
+  </div>
+
+  <script>
+    const db = new Dexie("InventoryDB");
+    db.version(2).stores({
+      groups: "++id,name",
+      parts: "++id,name,quantity,maxQuantity,groupId",
+      restock: "++id,name,quantity"
+    });
+
+    function showSection(id) {
+      document.querySelectorAll('.section').forEach(sec => sec.style.display='none');
+      document.getElementById(id).style.display='block';
+      if(id==='groups') loadGroups();
+      if(id==='parts') loadParts();
+      if(id==='restock') loadRestock();
+      if(id==='scan') startScanner();
+    }
+
+    async function addGroup(){
+      const name=document.getElementById('groupName').value;
+      if(!name) return;
+      await db.groups.add({name});
+      document.getElementById('groupName').value='';
+      loadGroups();
+    }
+
+    async function loadGroups(){
+      const groups=await db.groups.toArray();
+      const ul=document.getElementById('groupList');
+      ul.innerHTML='';
+      const select=document.getElementById('partGroup');
+      select.innerHTML='';
+      groups.forEach(g=>{
+        const li=document.createElement('li');
+        li.textContent=g.name;
+        const qrBtn=document.createElement('button');
+        qrBtn.textContent='QR';
+        qrBtn.onclick=()=>showQR(g.id);
+        li.appendChild(qrBtn);
+        ul.appendChild(li);
+        const opt=document.createElement('option');
+        opt.value=g.id; opt.textContent=g.name;
+        select.appendChild(opt);
+      });
+    }
+
+    async function showQR(groupId){
+      const url=location.href.split('#')[0]+`#group-${groupId}`;
+      const canvas=document.createElement('canvas');
+      QRCode.toCanvas(canvas,url); 
+      const w=window.open('');
+      w.document.body.appendChild(canvas);
+    }
+
+    async function addPart(){
+      const name=document.getElementById('partName').value;
+      const maxQty=parseInt(document.getElementById('partMaxQty').value);
+      const groupId=parseInt(document.getElementById('partGroup').value);
+      if(!name||!maxQty||!groupId) return;
+      await db.parts.add({name,quantity:maxQty,maxQuantity:maxQty,groupId});
+      document.getElementById('partName').value='';
+      document.getElementById('partMaxQty').value='';
+      loadParts();
+    }
+
+    async function loadParts(){
+      const parts=await db.parts.toArray();
+      const groups=await db.groups.toArray();
+      const ul=document.getElementById('partList');
+      ul.innerHTML='';
+      parts.forEach(p=>{
+        const li=document.createElement('li');
+        const g=groups.find(gr=>gr.id===p.groupId);
+        li.textContent=`${p.name} (${p.quantity}/${p.maxQuantity}) - ${g?g.name:''}`;
+        const useBtn=document.createElement('button');
+        useBtn.textContent='Use';
+        useBtn.onclick=()=>usePart(p.id);
+        li.appendChild(useBtn);
+        ul.appendChild(li);
+      });
+    }
+
+    async function usePart(id){
+      const part=await db.parts.get(id);
+      let useQty=parseInt(prompt("How many used?",1));
+      if(!useQty||useQty<1) return;
+      if(part.quantity<useQty){alert("Not enough in stock");return;}
+      part.quantity-=useQty;
+      await db.parts.put(part);
+      let existing=await db.restock.where('name').equals(part.name).first();
+      if(existing){
+        existing.quantity+=useQty;
+        await db.restock.put(existing);
+      } else {
+        await db.restock.add({name:part.name,quantity:useQty});
+      }
+      if(confirm("Undo this action?")){
+        part.quantity+=useQty;
+        await db.parts.put(part);
+        existing=await db.restock.where('name').equals(part.name).first();
+        if(existing){
+          existing.quantity-=useQty;
+          if(existing.quantity<=0) await db.restock.delete(existing.id);
+          else await db.restock.put(existing);
+        }
+      }
+      loadParts();
+      loadRestock();
+    }
+
+    async function loadRestock(){
+      const items=await db.restock.toArray();
+      const ul=document.getElementById('restockList');
+      ul.innerHTML='';
+      items.forEach(i=>{
+        const li=document.createElement('li');
+        li.textContent=`${i.name} - ${i.quantity}`;
+        ul.appendChild(li);
+      });
+    }
+
+    async function clearRestock(){
+      await db.restock.clear();
+      loadRestock();
+    }
+
+    async function replenishStock(){
+      const items=await db.restock.toArray();
+      for(const item of items){
+        const part=await db.parts.where('name').equals(item.name).first();
+        if(part){
+          part.quantity=part.maxQuantity;
+          await db.parts.put(part);
+        }
+      }
+      await db.restock.clear();
+      loadParts();
+      loadRestock();
+    }
+
+    function startScanner(){
+      const html5QrCode = new Html5Qrcode("reader");
+      Html5Qrcode.getCameras().then(devices => {
+        if(devices && devices.length) {
+          html5QrCode.start(
+            { facingMode: "environment" },
+            { fps: 10, qrbox: 250 },
+            qrCodeMessage => {
+              document.getElementById("scanResult").innerText = qrCodeMessage;
+              html5QrCode.stop();
+            });
+        }
+      });
+    }
+
+    async function exportData(){
+      const groups=await db.groups.toArray();
+      const parts=await db.parts.toArray();
+      const restock=await db.restock.toArray();
+      const data={groups,parts,restock};
+      const blob=new Blob([JSON.stringify(data)],{type:"application/json"});
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement('a');
+      a.href=url;a.download="inventory_backup.json";a.click();
+      localStorage.setItem('lastBackup', Date.now());
+    }
+
+    async function importData(event){
+      const file=event.target.files[0];
+      if(!file) return;
+      const text=await file.text();
+      const data=JSON.parse(text);
+      await db.transaction('rw',db.groups,db.parts,db.restock,async()=>{
+        await db.groups.clear();
+        await db.parts.clear();
+        await db.restock.clear();
+        await db.groups.bulkAdd(data.groups);
+        await db.parts.bulkAdd(data.parts);
+        await db.restock.bulkAdd(data.restock);
+      });
+      loadGroups();
+      loadParts();
+      loadRestock();
+    }
+
+    function checkBackupReminder(){
+      const last=localStorage.getItem('lastBackup');
+      if(!last) return;
+      const daysSince=(Date.now()-parseInt(last))/(1000*60*60*24);
+      if(daysSince>=7){
+        if(confirm(`It’s been ${Math.floor(daysSince)} days since your last backup. Export now?`)){
+          exportData();
+        }
+      }
+    }
+
+    window.onload=()=>{
+      showSection('groups');
+      setTimeout(checkBackupReminder,1000);
+    }
+  </script>
+</body>
+</html>
