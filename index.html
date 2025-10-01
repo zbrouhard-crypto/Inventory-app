@@ -1,244 +1,204 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Service Vehicle Inventory</title>
   <style>
     body { font-family: Arial, sans-serif; margin: 0; padding: 0; background: #f4f4f9; }
-    header { background: #2a6ebb; color: white; padding: 1em; text-align: center; }
-    nav { display: flex; justify-content: space-around; background: #ddd; padding: 0.5em; }
-    nav button { padding: 0.5em 1em; border: none; border-radius: 8px; cursor: pointer; background: #fff; }
-    nav button.active { background: #2a6ebb; color: white; }
+    header { background: #333; color: #fff; padding: 1em; text-align: center; }
+    nav { display: flex; justify-content: space-around; background: #444; }
+    nav button { flex: 1; padding: 1em; border: none; background: #444; color: #fff; font-size: 1em; cursor: pointer; }
+    nav button.active { background: #666; }
     section { display: none; padding: 1em; }
     section.active { display: block; }
-    .group, .part { border: 1px solid #ccc; border-radius: 8px; padding: 0.5em; margin: 0.5em 0; background: white; }
-    .btn { background: #2a6ebb; color: white; border: none; padding: 0.5em 1em; border-radius: 8px; cursor: pointer; }
-    .btn.danger { background: red; }
-    #qr-reader { width: 100%; max-width: 400px; margin: auto; }
-    #debug { font-size: 0.9em; color: darkred; margin-top: 1em; }
+    .group, .part { background: #fff; margin: .5em 0; padding: .5em; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+    .btn { padding: .5em 1em; margin: .25em; border: none; border-radius: 6px; cursor: pointer; }
+    .btn-primary { background: #007bff; color: #fff; }
+    .btn-danger { background: #dc3545; color: #fff; }
+    .btn-secondary { background: #6c757d; color: #fff; }
   </style>
-  <!-- QR Code scanner library -->
-  <script src="https://unpkg.com/html5-qrcode/minified/html5-qrcode.min.js"></script>
+  <!-- QR scanner library -->
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/minified/html5-qrcode.min.js"></script>
+  <!-- QR code generator -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 </head>
 <body>
-  <header>
-    <h1>Service Vehicle Inventory</h1>
-  </header>
+  <header><h1>Service Vehicle Inventory</h1></header>
   <nav>
-    <button onclick="showSection('home')" id="tab-home" class="active">Home</button>
-    <button onclick="showSection('groups')" id="tab-groups">Groups</button>
-    <button onclick="showSection('restock')" id="tab-restock">Restock</button>
-    <button onclick="showSection('settings')" id="tab-settings">Settings</button>
+    <button onclick="showSection('home')" id="homeTab" class="active">Home</button>
+    <button onclick="showSection('groups')" id="groupsTab">Groups</button>
+    <button onclick="showSection('restock')" id="restockTab">Restock</button>
+    <button onclick="showSection('settings')" id="settingsTab">Settings</button>
   </nav>
 
   <section id="home" class="active">
     <h2>Welcome</h2>
-    <button class="btn" onclick="startScanner()">📷 Scan QR Code</button>
-    <div id="qr-reader" style="display:none;"></div>
-    <div id="debug"></div>
-    <p>Or browse manually:</p>
-    <button class="btn" onclick="showSection('groups')">Browse Groups</button>
+    <p>Scan a QR code or browse groups manually.</p>
+    <button class="btn btn-primary" onclick="startScanner()">Scan QR Code</button>
+    <div id="qr-reader" style="width:100%; max-width:400px; margin:auto; display:none;"></div>
   </section>
 
   <section id="groups">
     <h2>Groups</h2>
-    <div id="groups-list"></div>
+    <div id="groupList"></div>
+    <button class="btn btn-secondary" onclick="printAllQRCodes()">Print QR Codes</button>
   </section>
 
   <section id="restock">
     <h2>Restock List</h2>
-    <ul id="restock-list"></ul>
-    <button class="btn" onclick="replenishAll()">✅ Replenish & Reset</button>
+    <div id="restockList"></div>
+    <button class="btn btn-primary" onclick="clearRestock()">Clear Restock List</button>
+    <button class="btn btn-danger" onclick="replenishStock()">Mark as Restocked</button>
   </section>
 
   <section id="settings">
-    <h2>Settings & Tools</h2>
-    <button class="btn" onclick="exportData()">⬇️ Export JSON</button>
-    <button class="btn" onclick="importData()">⬆️ Import JSON</button>
-    <input type="file" id="fileInput" style="display:none" />
-    <br/><br/>
-    <button class="btn" onclick="exportCSV()">⬇️ Export CSV</button>
-    <button class="btn" onclick="importCSV()">⬆️ Import CSV</button>
-    <input type="file" id="csvInput" style="display:none" />
-    <br/><br/>
-    <button class="btn danger" onclick="confirmWipe()">🗑️ Wipe All Data</button>
+    <h2>Settings</h2>
+    <button class="btn btn-secondary" onclick="exportData()">Export JSON</button>
+    <input type="file" id="importFile" onchange="importData(event)">
   </section>
 
   <script>
-    let inventory = {};
-    let restockList = {};
+    let data = { groups: {} };
+    let restock = {};
 
     function showSection(id) {
-      document.querySelectorAll("section").forEach(s => s.classList.remove("active"));
-      document.querySelector("#" + id).classList.add("active");
-      document.querySelectorAll("nav button").forEach(b => b.classList.remove("active"));
-      document.querySelector("#tab-" + id).classList.add("active");
-    }
-
-    function saveData() {
-      localStorage.setItem("inventoryData", JSON.stringify(inventory));
-      localStorage.setItem("restockData", JSON.stringify(restockList));
-    }
-
-    function loadData() {
-      let inv = localStorage.getItem("inventoryData");
-      let rest = localStorage.getItem("restockData");
-      if (inv) inventory = JSON.parse(inv);
-      if (rest) restockList = JSON.parse(rest);
-      renderGroups();
-      renderRestock();
+      document.querySelectorAll("section").forEach(sec => sec.classList.remove("active"));
+      document.querySelectorAll("nav button").forEach(btn => btn.classList.remove("active"));
+      document.getElementById(id).classList.add("active");
+      document.getElementById(id+"Tab").classList.add("active");
+      if(id === "groups") renderGroups();
+      if(id === "restock") renderRestock();
     }
 
     function renderGroups() {
-      let container = document.getElementById("groups-list");
+      let container = document.getElementById("groupList");
       container.innerHTML = "";
-      for (let g in inventory) {
-        let groupDiv = document.createElement("div");
-        groupDiv.className = "group";
-        let title = document.createElement("h3");
-        title.textContent = g;
-        groupDiv.appendChild(title);
-        inventory[g].forEach(p => {
+      for (let g in data.groups) {
+        let div = document.createElement("div");
+        div.className = "group";
+        div.innerHTML = `<h3>${g}</h3>`;
+        let qrDiv = document.createElement("div");
+        new QRCode(qrDiv, { text: g, width: 100, height: 100 });
+        div.appendChild(qrDiv);
+        data.groups[g].forEach((p,i) => {
           let partDiv = document.createElement("div");
           partDiv.className = "part";
-          partDiv.textContent = p.name + " (" + p.qty + "/" + p.max + ")";
-          partDiv.onclick = () => usePart(g, p.name);
-          groupDiv.appendChild(partDiv);
+          partDiv.innerHTML = `${p.name} - Qty: ${p.qty} <button class='btn btn-primary' onclick='usePart("${g}",${i})'>Use</button>`;
+          div.appendChild(partDiv);
         });
-        container.appendChild(groupDiv);
+        container.appendChild(div);
       }
     }
 
-    function usePart(group, part) {
-      let item = inventory[group].find(p => p.name === part);
-      if (item && item.qty > 0) {
-        item.qty--;
-        restockList[part] = (restockList[part] || 0) + 1;
+    function renderRestock() {
+      let container = document.getElementById("restockList");
+      container.innerHTML = "";
+      for (let item in restock) {
+        let div = document.createElement("div");
+        div.className = "part";
+        div.innerText = `${item} - Needed: ${restock[item]}`;
+        container.appendChild(div);
+      }
+    }
+
+    function usePart(group,index) {
+      let part = data.groups[group][index];
+      if (part.qty > 0) {
+        part.qty--;
+        restock[part.name] = (restock[part.name] || 0) + 1;
+        saveData();
+        renderGroups();
+      }
+    }
+
+    function clearRestock() {
+      if(confirm("Clear restock list?")) {
+        restock = {};
+        saveData();
+        renderRestock();
+      }
+    }
+
+    function replenishStock() {
+      if(confirm("Mark all as restocked?")) {
+        for (let g in data.groups) {
+          data.groups[g].forEach(p => p.qty = p.max);
+        }
+        restock = {};
         saveData();
         renderGroups();
         renderRestock();
       }
     }
 
-    function renderRestock() {
-      let ul = document.getElementById("restock-list");
-      ul.innerHTML = "";
-      for (let p in restockList) {
-        let li = document.createElement("li");
-        li.textContent = p + ": " + restockList[p];
-        ul.appendChild(li);
-      }
-    }
-
-    function replenishAll() {
-      if (!confirm("Replenish all parts to full quantities?")) return;
-      for (let g in inventory) {
-        inventory[g].forEach(p => p.qty = p.max);
-      }
-      restockList = {};
-      saveData();
-      renderGroups();
-      renderRestock();
-    }
-
     function exportData() {
-      let dataStr = JSON.stringify(inventory, null, 2);
-      let blob = new Blob([dataStr], {type: "application/json"});
+      let blob = new Blob([JSON.stringify(data)], {type: "application/json"});
       let url = URL.createObjectURL(blob);
       let a = document.createElement("a");
-      a.href = url; a.download = "inventory.json"; a.click();
+      a.href = url;
+      a.download = "inventory.json";
+      a.click();
     }
 
-    function importData() {
-      document.getElementById("fileInput").click();
-    }
-
-    document.getElementById("fileInput").addEventListener("change", function(evt) {
-      let file = evt.target.files[0];
+    function importData(event) {
+      let file = event.target.files[0];
+      if (!file) return;
       let reader = new FileReader();
       reader.onload = function(e) {
-        inventory = JSON.parse(e.target.result);
+        data = JSON.parse(e.target.result);
         saveData();
         renderGroups();
       };
       reader.readAsText(file);
-    });
-
-    function exportCSV() {
-      let rows = [["Group Name","Part Name","Max Quantity"]];
-      for (let g in inventory) {
-        inventory[g].forEach(p => {
-          rows.push([g, p.name, p.max]);
-        });
-      }
-      let csv = rows.map(r => r.join(",")).join("\n");
-      let blob = new Blob([csv], {type:"text/csv"});
-      let url = URL.createObjectURL(blob);
-      let a = document.createElement("a");
-      a.href = url; a.download = "inventory.csv"; a.click();
     }
 
-    function importCSV() {
-      document.getElementById("csvInput").click();
+    function saveData() {
+      localStorage.setItem("inventoryData", JSON.stringify(data));
+      localStorage.setItem("restockData", JSON.stringify(restock));
     }
 
-    document.getElementById("csvInput").addEventListener("change", function(evt) {
-      let file = evt.target.files[0];
-      let reader = new FileReader();
-      reader.onload = function(e) {
-        let lines = e.target.result.split(/\r?\n/);
-        inventory = {};
-        lines.slice(1).forEach(line => {
-          if (!line.trim()) return;
-          let [group, part, max] = line.split(",");
-          if (!inventory[group]) inventory[group] = [];
-          inventory[group].push({name: part, qty: parseInt(max), max: parseInt(max)});
-        });
-        saveData();
-        renderGroups();
-      };
-      reader.readAsText(file);
-    });
-
-    function confirmWipe() {
-      if (!confirm("⚠️ This will delete ALL data. Are you sure?")) return;
-      if (!confirm("⚠️ Really wipe EVERYTHING?")) return;
-      inventory = {};
-      restockList = {};
-      saveData();
-      renderGroups();
-      renderRestock();
+    function loadData() {
+      let d = localStorage.getItem("inventoryData");
+      if(d) data = JSON.parse(d);
+      let r = localStorage.getItem("restockData");
+      if(r) restock = JSON.parse(r);
     }
 
-    // QR SCANNER
     function startScanner() {
       document.getElementById("qr-reader").style.display = "block";
-      try {
-        let html5QrcodeScanner = new Html5Qrcode("qr-reader");
-        html5QrcodeScanner.start(
-          { facingMode: "environment" },
-          { fps: 10, qrbox: 250 },
-          qrCodeMessage => {
-            document.getElementById("debug").textContent = "Scanned: " + qrCodeMessage;
-            if (inventory[qrCodeMessage]) {
-              showSection('groups');
-              document.getElementById("groups-list").scrollIntoView();
-            }
-            html5QrcodeScanner.stop();
-          },
-          errorMessage => {
-            document.getElementById("debug").textContent = "Scanning... " + errorMessage;
+      let qrScanner = new Html5Qrcode("qr-reader");
+      qrScanner.start({ facingMode: "environment" }, { fps: 10, qrbox: 250 },
+        (decodedText) => {
+          qrScanner.stop();
+          document.getElementById("qr-reader").style.display = "none";
+          if(data.groups[decodedText]) {
+            showSection("groups");
+            alert("Opened group: " + decodedText);
+          } else {
+            alert("QR code not recognized.");
           }
-        ).catch(err => {
-          document.getElementById("debug").textContent = "Error starting scanner: " + err;
-        });
-      } catch (e) {
-        document.getElementById("debug").textContent = "QR scanner not available: " + e;
+        },
+        (error) => { console.log(error); }
+      );
+    }
+
+    function printAllQRCodes() {
+      let newWin = window.open("");
+      newWin.document.write("<h1>Group QR Codes</h1>");
+      for (let g in data.groups) {
+        newWin.document.write(`<h2>${g}</h2><div id='qr-${g}'></div><hr>`);
       }
+      newWin.document.write("<script src='https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js'><\/script>");
+      newWin.document.write("<script>");
+      for (let g in data.groups) {
+        newWin.document.write(`new QRCode(document.getElementById("qr-${g}"), { text: "${g}", width: 200, height: 200 });`);
+      }
+      newWin.document.write("<\/script>");
     }
 
     loadData();
+    renderGroups();
   </script>
 </body>
 </html>
