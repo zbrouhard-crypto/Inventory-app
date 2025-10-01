@@ -198,10 +198,15 @@ function showTab(tab){
   document.querySelectorAll('main section').forEach(s=>s.classList.add('hidden'));
   document.getElementById(tab).classList.remove('hidden');
   document.querySelectorAll('nav button').forEach(b=>b.classList.remove('active'));
+
   if(tab === 'home') document.getElementById('homeNav').classList.add('active');
   if(tab === 'groups') document.getElementById('groupsNav').classList.add('active');
   if(tab === 'restock') document.getElementById('restockNav').classList.add('active');
-  if(tab === 'settings'){ document.getElementById('settingsNav').classList.add('active'); onOpenSettings(); }
+  if(tab === 'settings'){ 
+    document.getElementById('settingsNav').classList.add('active'); 
+    onOpenSettings(); 
+  }
+
   // render current view
   if(tab === 'groups') renderGroupsList();
   if(tab === 'restock') renderRestock();
@@ -215,15 +220,29 @@ function renderGroupsList(){
   state.groups.forEach((g, idx)=>{
     const item = document.createElement('div');
     item.className = 'list-item';
+
     const left = document.createElement('div');
-    left.innerHTML = `<div style="font-weight:600">${g.name}</div><div class="small">${g.parts.length} parts</div>`;
+    left.innerHTML = `
+      <div style="font-weight:600">${g.name}</div>
+      <div class="small">${g.parts.length} parts</div>
+    `;
+
     const right = document.createElement('div');
-    const qrbtn = document.createElement('button'); qrbtn.textContent='QR'; qrbtn.className='small-btn';
+    const qrbtn = document.createElement('button'); 
+    qrbtn.textContent='QR'; 
+    qrbtn.className='small-btn';
     qrbtn.onclick = (ev)=>{ ev.stopPropagation(); showQRCode(g.id); };
-    const openBtn = document.createElement('button'); openBtn.textContent='Open'; openBtn.className='small-btn';
+
+    const openBtn = document.createElement('button'); 
+    openBtn.textContent='Open'; 
+    openBtn.className='small-btn';
     openBtn.onclick = ()=> showGroup(idx);
-    right.appendChild(qrbtn); right.appendChild(openBtn);
-    item.appendChild(left); item.appendChild(right);
+
+    right.appendChild(qrbtn); 
+    right.appendChild(openBtn);
+    item.appendChild(left); 
+    item.appendChild(right);
+
     item.onclick = ()=> showGroup(idx);
     el.appendChild(item);
   });
@@ -240,33 +259,6 @@ function addGroup(){
   renderGroupsList();
 }
 
-/* Show group details */
-function showGroup(index){
-  currentGroupIndex = index;
-  const g = state.groups[index];
-  document.getElementById('groupTitle').textContent = g.name;
-  const partsContainer = document.getElementById('partsContainer');
-  partsContainer.innerHTML = '';
-  if(g.parts.length === 0) partsContainer.innerHTML = '<div class="small">No parts yet</div>';
-  else {
-    g.parts.forEach((p, pi)=>{
-      const row = document.createElement('div');
-      row.className = 'part-row';
-      const left = document.createElement('div');
-      left.innerHTML = `<div style="font-weight:600">${p.name}</div><div class="small">${p.current} / ${p.max}</div>`;
-      const right = document.createElement('div');
-      const useBtn = document.createElement('button'); useBtn.textContent='Use'; useBtn.className='small-btn';
-      useBtn.onclick = ()=> usePart(index, pi);
-      const editBtn = document.createElement('button'); editBtn.textContent='Edit'; editBtn.className='small-btn';
-      editBtn.onclick = ()=> editPart(index, pi);
-      right.appendChild(useBtn); right.appendChild(editBtn);
-      row.appendChild(left); row.appendChild(right);
-      partsContainer.appendChild(row);
-    });
-  }
-  showTab('groupDetails');
-}
-
 /* Add part in current group (prompt) */
 function openAddPart(){
   if(currentGroupIndex === null) return alert('Open a group first');
@@ -280,40 +272,111 @@ function openAddPart(){
   showGroup(currentGroupIndex);
 }
 
+/* Show group details */
+function showGroup(index){
+  currentGroupIndex = index;
+  const g = state.groups[index];
+  document.getElementById('groupTitle').textContent = g.name;
+  const partsContainer = document.getElementById('partsContainer');
+  partsContainer.innerHTML = '';
+
+  if(g.parts.length === 0){
+    partsContainer.innerHTML = '<div class="small">No parts yet</div>';
+  } else {
+    g.parts.forEach((p, pi)=>{
+      const row = document.createElement('div');
+      row.className = 'part-row';
+
+      const left = document.createElement('div');
+      left.innerHTML = `
+        <div style="font-weight:600">${p.name}</div>
+        <div class="small">${p.current} / ${p.max}</div>
+      `;
+
+      const right = document.createElement('div');
+
+      // –1 button (quick subtract one)
+      const minusBtn = document.createElement('button');
+      minusBtn.textContent = '–1';
+      minusBtn.className = 'small-btn';
+      minusBtn.onclick = ()=> usePartQuick(index, pi, 1);
+
+      // Use Multiple button (via helper)
+      const useBtn = document.createElement('button');
+      useBtn.textContent = 'Use…';
+      useBtn.className = 'small-btn';
+      useBtn.onclick = ()=> usePartPrompt(index, pi);
+
+      // Edit button
+      const editBtn = document.createElement('button');
+      editBtn.textContent = 'Edit';
+      editBtn.className = 'small-btn';
+      editBtn.onclick = ()=> editPart(index, pi);
+
+      right.appendChild(minusBtn);
+      right.appendChild(useBtn);
+      right.appendChild(editBtn);
+
+      row.appendChild(left);
+      row.appendChild(right);
+      partsContainer.appendChild(row);
+    });
+  }
+
+  showTab('groupDetails');
+}
+
 /* Edit part */
 function editPart(gIdx, pIdx){
   const part = state.groups[gIdx].parts[pIdx];
-  const newName = prompt('Part name:', part.name); if(!newName) return;
-  const newMax = parseInt(prompt('Max quantity:', part.max),10); if(isNaN(newMax) || newMax<=0) return alert('Invalid max');
-  let newCurrent = parseInt(prompt('Current quantity:', part.current),10); if(isNaN(newCurrent) || newCurrent<0) newCurrent = part.current;
-  part.name = newName; part.max = newMax; part.current = Math.min(newMax, newCurrent);
+  const newName = prompt('Part name:', part.name); 
+  if(!newName) return;
+
+  const newMax = parseInt(prompt('Max quantity:', part.max),10); 
+  if(isNaN(newMax) || newMax<=0) return alert('Invalid max');
+
+  let newCurrent = parseInt(prompt('Current quantity:', part.current),10); 
+  if(isNaN(newCurrent) || newCurrent<0) newCurrent = part.current;
+
+  part.name = newName; 
+  part.max = newMax; 
+  part.current = Math.min(newMax, newCurrent);
+
   saveState();
   showGroup(gIdx);
 }
 
 /* Use part: decrement and add to aggregated restock */
-function usePart(gIdx, pIdx){
+function usePart(gIdx, pIdx, qty = 1) {
   const part = state.groups[gIdx].parts[pIdx];
-  const qty = parseInt(prompt('How many used?', '1'),10);
-  if(isNaN(qty) || qty<=0) return;
-  if(qty > part.current) return alert('Not enough in stock');
+  qty = parseInt(qty, 10);
+
+  if (isNaN(qty) || qty <= 0) return;
+  if (qty > part.current) return alert('Not enough in stock');
+
+  // Decrement current stock
   part.current -= qty;
+  if (part.current < 0) part.current = 0;
 
-  updateRestock(part.name, qty);   // 👈 replaces duplicate logic
+  // Add to restock list
+  updateRestock(part.name, qty);
 
+  // Save and refresh UI
   saveState();
   showGroup(gIdx);
   renderRestock();
+}
 
-  // immediate undo
-  if(confirm(`Used ${qty} x ${part.name}. Undo?`)){
-    part.current += qty;
-    const r = state.restock.find(r => r.name === part.name);
-    if(r){ r.qty -= qty; if(r.qty <= 0) state.restock = state.restock.filter(x=>x!==r); }
-    saveState();
-    showGroup(gIdx);
-    renderRestock();
-  }
+/* Quick use: just delegates to usePart */
+function usePartQuick(gIdx, pIdx, qty){
+  usePart(gIdx, pIdx, qty);
+}
+
+/* Ask user for a number (used when clicking "Use Multiple") */
+function usePartPrompt(gIdx, pIdx) {
+  const qty = parseInt(prompt('How many used?', '1'), 10);
+  if (isNaN(qty) || qty <= 0) return;
+  usePart(gIdx, pIdx, qty);
 }
 
 /* -------------------------
