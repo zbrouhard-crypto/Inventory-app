@@ -1,688 +1,195 @@
-<!doctype html>
+
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Service Vehicle Inventory (v7)</title>
-
-<!-- QR scanning library (Nimiq / qr-scanner) -->
-<script src="https://unpkg.com/html5-qrcode@2.3.8/minified/html5-qrcode.min.js"></script>
-<!-- QR code generation -->
-<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
-
-<style>
-  :root{ --accent:#e11d48; --muted:#6b7280; --bg:#f8fafc; --card:#fff; --danger:#b91c1c; }
-  body{ font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, Arial; margin:0; background:var(--bg); color:#111; -webkit-font-smoothing:antialiased; }
-  header{ background:#071233; color:white; padding:12px 14px; display:flex; justify-content:space-between; align-items:center; }
-  header h1{ margin:0; font-size:18px; }
-  nav{ display:flex; gap:8px; padding:12px; justify-content:center; flex-wrap:wrap; }
-  nav button{ padding:10px 14px; border-radius:10px; border:none; background:#fff; box-shadow:0 1px 2px rgba(0,0,0,0.06); cursor:pointer; min-width:110px; }
-  nav button.active{ background:linear-gradient(180deg,#fff,#f1f5f9); box-shadow:0 3px 8px rgba(0,0,0,0.08); }
-  main{ max-width:980px; margin:0 auto; padding:14px; }
-  .big-btn{ width:100%; padding:18px; font-size:18px; border-radius:12px; background:var(--accent); color:white; border:none; }
-  .secondary{ width:100%; padding:14px; font-size:16px; border-radius:10px; background:#0f172a; color:white; border:none; margin-top:10px; }
-  .card{ background:var(--card); border-radius:12px; padding:12px; box-shadow:0 1px 3px rgba(0,0,0,0.06); margin-top:12px; }
-  .small{ font-size:13px; color:var(--muted); }
-  .small-btn{ padding:6px 10px; border-radius:8px; border:none; background:#f3f4f6; cursor:pointer; margin-left:6px; }
-  .danger{ background:var(--danger); color:white; border:none; padding:8px 12px; border-radius:8px; cursor:pointer; }
-  .list-item{ display:flex; justify-content:space-between; align-items:center; padding:10px; border-radius:8px; margin-bottom:8px; background:#fff; box-shadow:0 1px 2px rgba(0,0,0,0.04); }
-  .part-row{ display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px dashed #eee; }
-  .part-row:last-child{ border-bottom:none; }
-  #qrFullModal{ display:none; position:fixed; inset:0; background:white; z-index:9999; align-items:center; justify-content:center; flex-direction:column; }
-  #qrCanvas{ width:80vw; height:80vw; max-width:520px; max-height:520px; }
-  #scannerModal{ display:none; position:fixed; inset:0; background:rgba(0,0,0,0.75); z-index:9999; align-items:center; justify-content:center; }
-  #scannerBox{ width:94%; max-width:720px; background:white; border-radius:10px; padding:12px; }
-  #debugLog{ margin-top:8px; font-size:13px; color:#111; background:#f8fafc; padding:8px; border-radius:8px; max-height:120px; overflow:auto; }
-  footer{ padding:14px; text-align:center; color:var(--muted); font-size:13px; }
-  .hidden{ display:none !important; }
-  input[type="text"], input[type="number"]{ padding:8px; border-radius:8px; border:1px solid #e5e7eb; width:100%; }
-  .controls{ display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; }
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Service Vehicle Inventory</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; padding: 0; background: #f4f4f9; }
+    header { background: #333; color: #fff; padding: 1em; text-align: center; }
+    nav { display: flex; justify-content: space-around; background: #444; }
+    nav button { flex: 1; padding: 1em; border: none; background: #444; color: #fff; font-size: 1em; }
+    nav button.active { background: #666; }
+    section { display: none; padding: 1em; }
+    section.active { display: block; }
+    .group, .part { background: #fff; margin: 0.5em 0; padding: 1em; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+    .btn { padding: 0.5em 1em; margin: 0.2em; border: none; border-radius: 6px; cursor: pointer; }
+    .btn-primary { background: #007bff; color: #fff; }
+    .btn-danger { background: #dc3545; color: #fff; }
+    .btn-secondary { background: #6c757d; color: #fff; }
+    #qr-video { width: 100%; max-width: 400px; margin: 1em auto; display: block; }
+    #qr-canvas { margin-top: 1em; }
+  </style>
 </head>
 <body>
+  <header>
+    <h1>Service Vehicle Inventory</h1>
+  </header>
 
-<header>
-  <h1>Service Vehicle Inventory</h1>
-  <div id="settingsIndicator" class="small"><span id="settingsDot" class="hidden" title="Backup reminder">●</span></div>
-</header>
+  <nav>
+    <button onclick="showSection('home')" class="active">Home</button>
+    <button onclick="showSection('groups')">Groups</button>
+    <button onclick="showSection('restock')">Restock</button>
+    <button onclick="showSection('settings')">Settings</button>
+  </nav>
 
-<nav>
-  <button id="homeNav" class="active" onclick="showTab('home')">Home</button>
-  <button id="groupsNav" onclick="showTab('groups')">Groups</button>
-  <button id="restockNav" onclick="showTab('restock')">Restock</button>
-  <button id="settingsNav" onclick="showTab('settings')">Settings <span id="dot" class="hidden" style="margin-left:8px;color:var(--accent)">●</span></button>
-</nav>
-
-<main id="main">
-  <!-- HOME -->
-  <section id="home" class="card">
-    <button class="big-btn" onclick="openScanner()">🔍 Scan QR Code</button>
-    <button class="secondary" onclick="showTab('groups')">📂 Browse Groups Manually</button>
-    <div class="small" style="margin-top:10px">Tip: add this page to your home screen for quick access.</div>
+  <section id="home" class="active">
+    <h2>Welcome</h2>
+    <button class="btn btn-primary" onclick="startScanner()">Scan QR Code</button>
+    <video id="qr-video"></video>
+    <div id="scan-result"></div>
   </section>
 
-  <!-- GROUPS -->
-  <section id="groups" class="hidden">
-    <div style="display:flex; gap:8px;">
-      <input id="newGroupName" placeholder="New group name" />
-      <button class="small-btn" onclick="addGroup()">Add Group</button>
-    </div>
-    <div id="groupsList" style="margin-top:12px"></div>
+  <section id="groups">
+    <h2>Groups</h2>
+    <div id="groups-list"></div>
   </section>
 
-  <!-- GROUP DETAILS -->
-  <section id="groupDetails" class="card hidden">
-    <div style="display:flex; justify-content:space-between; align-items:center;">
-      <h2 id="groupTitle">Group</h2>
-      <div>
-        <button class="small-btn" onclick="showQRCodeForCurrent()">🖨 Show QR Code</button>
-        <button class="small-btn" onclick="showTab('groups')">⬅ Back</button>
-      </div>
-    </div>
-    <div id="partsContainer" style="margin-top:12px"></div>
-    <div class="controls">
-      <button class="small-btn" onclick="openAddPart()">➕ Add Part</button>
-      <button class="small-btn" onclick="replenishGroup()">🔄 Replenish Group</button>
-    </div>
-  </section>
-
-  <!-- RESTOCK -->
-  <section id="restock" class="card hidden">
+  <section id="restock">
     <h2>Restock List</h2>
-    <div id="restockListArea"></div>
-    <div class="controls" style="margin-top:12px;">
-      <button class="small-btn" onclick="clearRestock()">Clear Restock</button>
-      <button class="small-btn" onclick="replenishAll()">Replenish All</button>
-    </div>
+    <ul id="restock-list"></ul>
+    <button class="btn btn-secondary" onclick="clearRestock()">Mark as Restocked</button>
   </section>
 
-  <!-- SETTINGS -->
-  <section id="settings" class="card hidden">
-    <h2>Admin & Backup</h2>
-
-    <div style="margin-top:10px;">
-      <button class="small-btn" onclick="exportCSV()">📤 Export CSV</button>
-      <div class="small">Download groups & parts (for Excel)</div>
-    </div>
-
-    <div style="margin-top:10px;">
-      <input id="importCsvInput" type="file" accept=".csv" class="hidden" onchange="handleImportCSV(event)">
-      <button class="small-btn" onclick="document.getElementById('importCsvInput').click()">📥 Import CSV</button>
-      <div class="small">Replace all data from a CSV file (wipe & rebuild)</div>
-    </div>
-
-    <div style="margin-top:10px;">
-      <button class="small-btn" onclick="exportJSON()">📤 Export JSON</button>
-      <div class="small">Download a full JSON backup</div>
-    </div>
-
-    <div style="margin-top:10px;">
-      <input id="importJsonInput" type="file" accept=".json" class="hidden" onchange="handleImportJSON(event)">
-      <button class="small-btn" onclick="document.getElementById('importJsonInput').click()">📥 Import JSON</button>
-      <div class="small">Restore full backup (wipe & restore)</div>
-    </div>
-
-    <div style="margin-top:14px;">
-      <button class="danger" onclick="clearAllData()">🗑 Clear All Data</button>
-      <div class="small">Double confirmation required</div>
-    </div>
+  <section id="settings">
+    <h2>Settings</h2>
+    <button class="btn btn-danger" onclick="downloadData()">Export Data</button>
+    <input type="file" id="importFile" onchange="importData(event)" />
   </section>
-</main>
 
-<!-- Full-screen QR modal -->
-<div id="qrFullModal" style="display:none; position:fixed; inset:0; background:white; z-index:9999; align-items:center; justify-content:center; flex-direction:column;">
-  <div id="qrCanvas" style="text-align:center;"></div>
-  <div id="qrNameLabel" style="margin-top:12px; font-weight:700; font-size:18px;"></div>
-  <button onclick="closeQRModal()" style="margin-top:16px; padding:10px 14px; border-radius:8px; background:var(--accent); color:white; border:none;">Close</button>
-</div>
+  <canvas id="qr-canvas" style="display:none;"></canvas>
 
-<!-- Scanner modal -->
-<div id="scannerModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.75); z-index:9999; align-items:center; justify-content:center;">
-  <div id="scannerBox" style="width:94%; max-width:720px; background:white; padding:12px; border-radius:10px;">
-    <div id="videoContainer" style="width:100%; height:auto; text-align:center;">
-      <!-- qr-scanner will place a video element here -->
-      <div id="qrVideoWrapper" style="width:100%;"></div>
-    </div>
-    <div style="display:flex; gap:8px; margin-top:8px;">
-      <button onclick="stopScanner()" style="flex:1; padding:10px; border-radius:8px;">Cancel</button>
-      <button onclick="toggleTorch()" id="torchBtn" style="flex:1; padding:10px; border-radius:8px;">Toggle Flash</button>
-    </div>
-    <div id="debugLog" style="margin-top:8px; max-height:140px; overflow:auto;"></div>
-  </div>
-</div>
+  <script src="https://unpkg.com/qr-scanner@1.4.2/qr-scanner.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
+  <script>
+    let groups = [
+      { id: 1, name: "Bin 1", parts: [ { name: "1A Fuse", qty: 10 }, { name: "2A Fuse", qty: 10 } ] },
+      { id: 2, name: "Bin 2", parts: [ { name: "100A Breaker", qty: 5 }, { name: "150A Breaker", qty: 5 } ] }
+    ];
+    let restock = [];
 
-<footer>Made for single-user offline use. Data stored locally in your browser.</footer>
-
-<script>
-/* -------------------------
-  Setup qr-scanner worker path
----------------------------*/
-if(window.QrScanner){
-  // use unpkg worker path
-  QrScanner.WORKER_PATH = 'https://unpkg.com/qr-scanner@1.4.2/qr-scanner-worker.min.js';
-}
-
-/* -------------------------
-  Data model & persistence
----------------------------*/
-const LS_KEY = 'svc_inventory_v7';
-const LS_BACKUP = 'svc_inventory_v7_lastbackup';
-
-let state = { groups: [], restock: [] };
-let currentGroupIndex = null;
-let qrScannerInstance = null;
-let torchOn = false;
-
-function genId(pref='id'){ return pref + '_' + Math.random().toString(36).slice(2,9); }
-
-function loadState(){
-  try{
-    const raw = localStorage.getItem(LS_KEY);
-    if(raw) state = JSON.parse(raw);
-    else {
-      // optional demo data if none exists
-      // state.groups = [{id:genId('g'), name:'Toolbox Drawer 1', parts:[{id:genId('p'), name:'Bolts', current:45, max:50},{id:genId('p'), name:'Wrench', current:3, max:3}]}];
-      saveState();
+    function showSection(id) {
+      document.querySelectorAll('section').forEach(sec => sec.classList.remove('active'));
+      document.querySelectorAll('nav button').forEach(btn => btn.classList.remove('active'));
+      document.getElementById(id).classList.add('active');
+      document.querySelector(`nav button[onclick="showSection('${id}')"]`).classList.add('active');
+      if (id === "groups") renderGroups();
+      if (id === "restock") renderRestock();
     }
-  }catch(e){ console.error('loadState err', e); }
-}
-function saveState(){
-  localStorage.setItem(LS_KEY, JSON.stringify(state));
-  updateBackupBadge();
-}
 
-/* -------------------------
-  Navigation & rendering
----------------------------*/
-function showTab(tab){
-  document.querySelectorAll('main section').forEach(s=>s.classList.add('hidden'));
-  document.getElementById(tab).classList.remove('hidden');
-  document.querySelectorAll('nav button').forEach(b=>b.classList.remove('active'));
-  if(tab === 'home') document.getElementById('homeNav').classList.add('active');
-  if(tab === 'groups') document.getElementById('groupsNav').classList.add('active');
-  if(tab === 'restock') document.getElementById('restockNav').classList.add('active');
-  if(tab === 'settings'){ document.getElementById('settingsNav').classList.add('active'); onOpenSettings(); }
-  // render current view
-  if(tab === 'groups') renderGroupsList();
-  if(tab === 'restock') renderRestock();
-  if(tab === 'home'){ /* nothing special */ }
-}
-
-/* Groups list */
-function renderGroupsList(){
-  const el = document.getElementById('groupsList');
-  el.innerHTML = '';
-  state.groups.forEach((g, idx)=>{
-    const item = document.createElement('div');
-    item.className = 'list-item';
-    const left = document.createElement('div');
-    left.innerHTML = `<div style="font-weight:600">${g.name}</div><div class="small">${g.parts.length} parts</div>`;
-    const right = document.createElement('div');
-    const qrbtn = document.createElement('button'); qrbtn.textContent='QR'; qrbtn.className='small-btn';
-    qrbtn.onclick = (ev)=>{ ev.stopPropagation(); showQRCode(g.id); };
-    const openBtn = document.createElement('button'); openBtn.textContent='Open'; openBtn.className='small-btn';
-    openBtn.onclick = ()=> showGroup(idx);
-    right.appendChild(qrbtn); right.appendChild(openBtn);
-    item.appendChild(left); item.appendChild(right);
-    item.onclick = ()=> showGroup(idx);
-    el.appendChild(item);
-  });
-}
-
-/* Add group */
-function addGroup(){
-  const name = (document.getElementById('newGroupName').value || '').trim();
-  if(!name) return alert('Enter a group name');
-  const group = { id: genId('g'), name, parts: [] };
-  state.groups.push(group);
-  document.getElementById('newGroupName').value = '';
-  saveState();
-  renderGroupsList();
-}
-
-/* Show group details */
-function showGroup(index){
-  currentGroupIndex = index;
-  const g = state.groups[index];
-  document.getElementById('groupTitle').textContent = g.name;
-  const partsContainer = document.getElementById('partsContainer');
-  partsContainer.innerHTML = '';
-  if(g.parts.length === 0) partsContainer.innerHTML = '<div class="small">No parts yet</div>';
-  else {
-    g.parts.forEach((p, pi)=>{
-      const row = document.createElement('div');
-      row.className = 'part-row';
-      const left = document.createElement('div');
-      left.innerHTML = `<div style="font-weight:600">${p.name}</div><div class="small">${p.current} / ${p.max}</div>`;
-      const right = document.createElement('div');
-      const useBtn = document.createElement('button'); useBtn.textContent='Use'; useBtn.className='small-btn';
-      useBtn.onclick = ()=> usePart(index, pi);
-      const editBtn = document.createElement('button'); editBtn.textContent='Edit'; editBtn.className='small-btn';
-      editBtn.onclick = ()=> editPart(index, pi);
-      right.appendChild(useBtn); right.appendChild(editBtn);
-      row.appendChild(left); row.appendChild(right);
-      partsContainer.appendChild(row);
-    });
-  }
-  showTab('groupDetails');
-}
-
-/* Add part in current group (prompt) */
-function openAddPart(){
-  if(currentGroupIndex === null) return alert('Open a group first');
-  const name = prompt('Part name:');
-  if(!name) return;
-  const max = parseInt(prompt('Max quantity (full stock):','10'),10);
-  if(isNaN(max) || max <= 0) return alert('Invalid max');
-  const p = { id: genId('p'), name, current: max, max };
-  state.groups[currentGroupIndex].parts.push(p);
-  saveState();
-  showGroup(currentGroupIndex);
-}
-
-/* Edit part */
-function editPart(gIdx, pIdx){
-  const part = state.groups[gIdx].parts[pIdx];
-  const newName = prompt('Part name:', part.name); if(!newName) return;
-  const newMax = parseInt(prompt('Max quantity:', part.max),10); if(isNaN(newMax) || newMax<=0) return alert('Invalid max');
-  let newCurrent = parseInt(prompt('Current quantity:', part.current),10); if(isNaN(newCurrent) || newCurrent<0) newCurrent = part.current;
-  part.name = newName; part.max = newMax; part.current = Math.min(newMax, newCurrent);
-  saveState();
-  showGroup(gIdx);
-}
-
-/* Use part: decrement and add to aggregated restock */
-function usePart(gIdx, pIdx){
-  const part = state.groups[gIdx].parts[pIdx];
-  const qty = parseInt(prompt('How many used?', '1'),10);
-  if(isNaN(qty) || qty<=0) return;
-  if(qty > part.current) return alert('Not enough in stock');
-  part.current -= qty;
-
-  const existing = state.restock.find(r => r.name === part.name);
-  if(existing) existing.qty += qty;
-  else state.restock.push({ name: part.name, qty });
-
-  saveState();
-  showGroup(gIdx);
-  renderRestock();
-
-  // immediate undo
-  if(confirm(`Used ${qty} x ${part.name}. Undo?`)){
-    part.current += qty;
-    const r = state.restock.find(r => r.name === part.name);
-    if(r){ r.qty -= qty; if(r.qty <= 0) state.restock = state.restock.filter(x=>x!==r); }
-    saveState();
-    showGroup(gIdx);
-    renderRestock();
-  }
-}
-
-/* -------------------------
-  Restock functions
----------------------------*/
-function renderRestock(){
-  const area = document.getElementById('restockListArea');
-  area.innerHTML = '';
-  if(!state.restock || state.restock.length === 0){
-    area.innerHTML = '<div class="small">No items to restock.</div>'; return;
-  }
-  state.restock.forEach(item=>{
-    const node = document.createElement('div'); node.className='card';
-    node.innerHTML = `<div style="display:flex; justify-content:space-between;"><div><strong>${item.name}</strong><div class="small">Used: ${item.qty}</div></div></div>`;
-    area.appendChild(node);
-  });
-}
-
-function clearRestock(){
-  if(!confirm('Clear restock list?')) return;
-  state.restock = [];
-  saveState();
-  renderRestock();
-}
-
-function replenishGroup(){
-  if(currentGroupIndex === null) return;
-  const g = state.groups[currentGroupIndex];
-  g.parts.forEach(p => p.current = p.max);
-  // remove restock items for these part names
-  g.parts.forEach(p => { state.restock = state.restock.filter(r => r.name !== p.name); });
-  saveState();
-  showGroup(currentGroupIndex);
-  renderRestock();
-}
-
-function replenishAll(){
-  state.groups.forEach(g => g.parts.forEach(p => p.current = p.max));
-  state.restock = [];
-  saveState();
-  renderRestock();
-  if(currentGroupIndex !== null) showGroup(currentGroupIndex);
-}
-
-/* -------------------------
-  QR generation & full-screen
----------------------------*/
-function showQRCode(groupId){
-  const g = state.groups.find(x => x.id === groupId);
-  if(!g) return alert('Group not found');
-  const value = 'INV-GROUP:' + g.id;
-  const canvasWrap = document.getElementById('qrCanvas');
-  canvasWrap.innerHTML = '';
-  const canvas = document.createElement('canvas');
-  canvas.id = 'qrCanvasEl';
-  canvasWrap.appendChild(canvas);
-  // generate QR to canvas
-  QRCode.toCanvas(canvas, value, { width: 600 }, function(err){
-    if(err) console.error(err);
-  });
-  document.getElementById('qrNameLabel').textContent = g.name;
-  document.getElementById('qrFullModal').style.display = 'flex';
-}
-function showQRCodeForCurrent(){
-  if(currentGroupIndex === null) return alert('No group open');
-  showQRCode(state.groups[currentGroupIndex].id);
-}
-function closeQRModal(){
-  document.getElementById('qrFullModal').style.display = 'none';
-}
-
-/* -------------------------
-  Scanner using QrScanner lib (debug logs)
----------------------------*/
-function logDebug(msg){
-  const el = document.getElementById('debugLog');
-  if(!el) return;
-  const time = new Date().toLocaleTimeString();
-  el.innerHTML = `<div>[${time}] ${msg}</div>` + el.innerHTML;
-}
-
-/* Open scanner modal and start camera */
-function openScanner(){
-  // show scanner UI
-  document.getElementById('scannerModal').style.display = 'flex';
-  document.getElementById('debugLog').innerHTML = '';
-  logDebug('Opening scanner...');
-
-  // create video element in wrapper
-  const wrapper = document.getElementById('qrVideoWrapper');
-  wrapper.innerHTML = '';
-  const video = document.createElement('video');
-  video.style.width = '100%';
-  video.setAttribute('muted',''); video.setAttribute('playsinline',''); // important for iOS
-  wrapper.appendChild(video);
-
-  // initialize QrScanner
-  try {
-    if(window.QrScanner === undefined) {
-      logDebug('QrScanner library not available.');
-      alert('Scanner library not loaded.');
-      return;
-    }
-    // create instance
-    qrScannerInstance = new QrScanner(video, result => {
-      logDebug('QR detected: ' + result);
-      handleScannedValue(result);
-    }, {
-      onDecodeError: error => {
-        // ignore decode errors
-      },
-      returnDetailedScanResult: false
-    });
-
-    // start scanner
-    QrScanner.hasCamera().then(hasCamera => {
-      if(!hasCamera) {
-        logDebug('No camera found on device.');
-        alert('No camera found on this device.');
-        document.getElementById('scannerModal').style.display = 'none';
-        return;
-      }
-      qrScannerInstance.start().then(()=> {
-        logDebug('Camera started successfully.');
-      }).catch(err=>{
-        logDebug('Camera start error: ' + err);
-        alert('Camera start error. Check permissions and that you opened via https.');
-        document.getElementById('scannerModal').style.display = 'none';
+    function renderGroups() {
+      const list = document.getElementById("groups-list");
+      list.innerHTML = "";
+      groups.forEach(g => {
+        const div = document.createElement("div");
+        div.className = "group";
+        div.innerHTML = \`
+          <h3>\${g.name}</h3>
+          <button class="btn btn-primary" onclick="viewGroup(\${g.id})">View</button>
+          <button class="btn btn-secondary" onclick="generateQR(\${g.id})">Show QR</button>
+        \`;
+        list.appendChild(div);
       });
-    }).catch(err=>{
-      logDebug('Camera check error: ' + err);
-      alert('Camera unavailable: ' + err);
-      document.getElementById('scannerModal').style.display = 'none';
-    });
-
-  } catch(err){
-    logDebug('Scanner initialization error: ' + err);
-    alert('Scanner initialization error. See debug log.');
-    document.getElementById('scannerModal').style.display = 'none';
-  }
-}
-
-/* handle scanned QR value */
-function handleScannedValue(value){
-  // expected format: 'INV-GROUP:<groupId>' (we encode group id)
-  if(!value) { logDebug('Empty scan'); return; }
-  if(value.startsWith('INV-GROUP:')){
-    const gid = value.split(':')[1];
-    const idx = state.groups.findIndex(g => g.id === gid);
-    if(idx >= 0){
-      stopScanner();
-      logDebug('Navigating to group index ' + idx);
-      showGroup(idx);
-      showTab('groupDetails');
-      return;
-    } else {
-      logDebug('Group ID scanned but not in library: ' + gid);
-      alert('Group scanned but not found in library.');
-      return;
     }
-  } else {
-    // fallback: if someone scanned a QR with group name only
-    const idxName = state.groups.findIndex(g => g.name === value);
-    if(idxName >= 0){
-      stopScanner();
-      showGroup(idxName);
-      showTab('groupDetails');
-      return;
-    } else {
-      logDebug('Scanned value not recognized: ' + value);
-      alert('Scanned value not recognized by this app: ' + value);
+
+    function viewGroup(id) {
+      const group = groups.find(g => g.id === id);
+      let html = \`<h3>\${group.name}</h3>\`;
+      group.parts.forEach(p => {
+        html += \`
+          <div class="part">
+            \${p.name} - Qty: \${p.qty}
+            <button class="btn btn-primary" onclick="usePart(\${id}, '\${p.name}')">Use</button>
+          </div>\`;
+      });
+      document.getElementById("groups-list").innerHTML = html;
     }
-  }
-}
 
-/* stop scanner */
-function stopScanner(){
-  if(qrScannerInstance){
-    qrScannerInstance.stop();
-    qrScannerInstance.destroy();
-    qrScannerInstance = null;
-  }
-  document.getElementById('scannerModal').style.display = 'none';
-  logDebug('Scanner stopped.');
-}
-
-/* toggle torch (if supported) */
-async function toggleTorch(){
-  if(!qrScannerInstance){ alert('Scanner not running'); return; }
-  try{
-    torchOn = !torchOn;
-    await qrScannerInstance.setFlash(torchOn);
-    logDebug('Torch toggled: ' + (torchOn ? 'ON' : 'OFF'));
-  } catch(err){
-    logDebug('Torch toggle error: ' + err);
-    alert('Torch not supported on this device/browser.');
-  }
-}
-
-/* -------------------------
-  CSV / JSON import & export
----------------------------*/
-function exportCSV(){
-  const rows = [['Group Name','Part Name','Max Quantity','Current Quantity']];
-  state.groups.forEach(g=>{
-    g.parts.forEach(p=>{
-      rows.push([g.name, p.name, p.max, p.current]);
-    });
-  });
-  const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\r\n');
-  const blob = new Blob([csv], { type:'text/csv' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a'); a.href = url; a.download = 'inventory_library.csv'; a.click(); URL.revokeObjectURL(url);
-}
-
-function handleImportCSV(evt){
-  const file = evt.target.files[0];
-  if(!file) return;
-  if(!confirm('This will replace all current data. Continue?')) { evt.target.value = ''; return; }
-  const reader = new FileReader();
-  reader.onload = e => {
-    const text = e.target.result;
-    const lines = text.split(/\r?\n/).filter(Boolean);
-    if(lines.length <= 1) return alert('CSV appears empty or malformed');
-    // simple CSV parse supporting quotes
-    const parseLine = ln => {
-      const res=[]; let cur=''; let inQ=false;
-      for(let i=0;i<ln.length;i++){
-        const ch = ln[i];
-        if(ch === '"'){ inQ = !inQ; continue; }
-        if(ch === ',' && !inQ){ res.push(cur); cur=''; continue; }
-        cur += ch;
+    function usePart(groupId, partName) {
+      const group = groups.find(g => g.id === groupId);
+      const part = group.parts.find(p => p.name === partName);
+      if (part.qty > 0) {
+        part.qty--;
+        restock.push(partName);
+        renderRestock();
+        viewGroup(groupId);
       }
-      res.push(cur);
-      return res.map(s => s.trim());
-    };
-    const headers = parseLine(lines[0]).map(h=>h.toLowerCase());
-    const idxGroup = headers.indexOf('group name'), idxPart = headers.indexOf('part name'), idxMax = headers.indexOf('max quantity'), idxCur = headers.indexOf('current quantity');
-    if(idxGroup < 0 || idxPart < 0 || idxMax < 0) return alert('CSV must include Group Name, Part Name, Max Quantity columns');
-    const groupsMap = {};
-    const newGroups = [];
-    for(let i=1;i<lines.length;i++){
-      const row = parseLine(lines[i]);
-      if(!row || row.length === 0) continue;
-      const gname = row[idxGroup] || 'Default';
-      const pname = row[idxPart] || '';
-      const maxQ = parseInt(row[idxMax]) || 0;
-      const curQ = (idxCur >=0 && row[idxCur] !== undefined && row[idxCur] !== '') ? parseInt(row[idxCur]) : maxQ;
-      if(!pname) continue;
-      if(!groupsMap[gname]){ groupsMap[gname] = { id: genId('g'), name: gname, parts: [] }; newGroups.push(groupsMap[gname]); }
-      groupsMap[gname].parts.push({ id: genId('p'), name: pname, max: maxQ, current: Math.min(curQ, maxQ) });
     }
-    state.groups = newGroups;
-    state.restock = [];
-    saveState();
-    renderAll();
-    alert('CSV import complete');
-    document.getElementById('importCsvInput').value = '';
-  };
-  reader.readAsText(file);
-}
 
-function exportJSON(){
-  const blob = new Blob([JSON.stringify(state, null, 2)], { type:'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a'); a.href = url; a.download = 'inventory_backup.json'; a.click(); URL.revokeObjectURL(url);
-  localStorage.setItem(LS_BACKUP, Date.now().toString());
-  updateBackupBadge();
-}
+    function renderRestock() {
+      const list = document.getElementById("restock-list");
+      list.innerHTML = "";
+      const counts = {};
+      restock.forEach(item => counts[item] = (counts[item] || 0) + 1);
+      Object.entries(counts).forEach(([name, qty]) => {
+        const li = document.createElement("li");
+        li.textContent = \`\${name} x\${qty}\`;
+        list.appendChild(li);
+      });
+    }
 
-function handleImportJSON(evt){
-  const file = evt.target.files[0];
-  if(!file) return;
-  if(!confirm('This will replace all current data. Continue?')){ evt.target.value = ''; return; }
-  const reader = new FileReader();
-  reader.onload = e => {
-    try{
-      const obj = JSON.parse(e.target.result);
-      if(!obj || !Array.isArray(obj.groups)) return alert('Invalid JSON backup');
-      state = obj;
-      saveState();
-      renderAll();
-      alert('Import complete');
-      evt.target.value = '';
-    } catch(err){ alert('Could not parse JSON'); }
-  };
-  reader.readAsText(file);
-}
+    function clearRestock() {
+      restock = [];
+      groups.forEach(g => g.parts.forEach(p => p.qty = 10)); // reset to full stock for demo
+      renderRestock();
+      renderGroups();
+    }
 
-/* -------------------------
-  Clear all data (double-confirm)
----------------------------*/
-function clearAllData(){
-  if(!confirm('Are you sure you want to delete all groups, parts, and restock data? This cannot be undone.')) return;
-  const s = prompt('Type DELETE to confirm:');
-  if(s !== 'DELETE'){ alert('Confirmation failed'); return; }
-  state = { groups: [], restock: [] };
-  localStorage.removeItem(LS_KEY);
-  localStorage.removeItem(LS_BACKUP);
-  saveState();
-  renderAll();
-  alert('All data cleared');
-}
+    async function generateQR(groupId) {
+      const group = groups.find(g => g.id === groupId);
+      const canvas = document.getElementById("qr-canvas");
+      const qrData = \`INV-GROUP:\${group.id}|\${group.name}\`;
+      await QRCode.toCanvas(canvas, qrData, { width: 200 });
+      const qrWindow = window.open("", "_blank");
+      qrWindow.document.write(\`<h3>\${group.name}</h3>\`);
+      qrWindow.document.body.appendChild(canvas.cloneNode(true));
+      const btn = qrWindow.document.createElement("button");
+      btn.textContent = "Download QR";
+      btn.onclick = () => {
+        const link = document.createElement("a");
+        link.download = \`\${group.name}_QR.png\`;
+        link.href = canvas.toDataURL();
+        link.click();
+      };
+      qrWindow.document.body.appendChild(btn);
+    }
 
-/* -------------------------
-  Backup reminder badge logic
----------------------------*/
-function updateBackupBadge(){
-  const last = parseInt(localStorage.getItem(LS_BACKUP) || '0', 10);
-  const dot = document.getElementById('dot');
-  if(!last){ dot.classList.remove('hidden'); return; }
-  const days = (Date.now() - last) / (1000*60*60*24);
-  if(days >= 7) dot.classList.remove('hidden'); else dot.classList.add('hidden');
-}
-function onOpenSettings(){
-  updateBackupBadge();
-  const dotVis = !document.getElementById('dot').classList.contains('hidden');
-  if(dotVis){
-    const doBackup = confirm("It's been 7+ days since your last JSON backup. Back Up Now? (OK=Back Up Now, Cancel=Ignore)");
-    if(doBackup){ exportJSON(); document.getElementById('dot').classList.add('hidden'); }
-    else { localStorage.setItem(LS_BACKUP, Date.now().toString()); document.getElementById('dot').classList.add('hidden'); }
-  }
-}
+    async function startScanner() {
+      const video = document.getElementById("qr-video");
+      const resultDiv = document.getElementById("scan-result");
+      const scanner = new QrScanner(video, result => {
+        resultDiv.textContent = "Scanned: " + result;
+        if (result.startsWith("INV-GROUP:")) {
+          const [id, name] = result.replace("INV-GROUP:", "").split("|");
+          const group = groups.find(g => g.id == id);
+          if (group) {
+            viewGroup(group.id);
+            showSection("groups");
+          }
+        }
+        scanner.stop();
+      });
+      scanner.start();
+    }
 
-/* -------------------------
-  Utilities & rendering
----------------------------*/
-function renderAll(){
-  renderGroupsList();
-  renderRestock();
-  if(currentGroupIndex !== null) {
-    // keep showing details if open
-    if(document.getElementById('groupDetails').classList.contains('hidden') === false) showGroup(currentGroupIndex);
-  }
-}
+    function downloadData() {
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(groups));
+      const link = document.createElement("a");
+      link.setAttribute("href", dataStr);
+      link.setAttribute("download", "inventory.json");
+      link.click();
+    }
 
-function renderRestock(){
-  const area = document.getElementById('restockListArea');
-  if(!area) return;
-  area.innerHTML = '';
-  if(!state.restock || state.restock.length === 0){
-    area.innerHTML = '<div class="small">No items to restock.</div>'; return;
-  }
-  state.restock.forEach(item=>{
-    const node = document.createElement('div'); node.className='card';
-    node.innerHTML = `<div style="display:flex; justify-content:space-between;"><div><strong>${item.name}</strong><div class="small">Used: ${item.qty}</div></div></div>`;
-    area.appendChild(node);
-  });
-}
-
-/* -------------------------
-  Startup
----------------------------*/
-loadState();
-renderAll();
-updateBackupBadge();
-showTab('home');
-
-/* Expose CSV/JSON import handlers (wired to inputs) */
-window.handleImportCSV = handleImportCSV;
-window.handleImportJSON = handleImportJSON;
-
-/* Helper to show group details by id (if needed externally) */
-function showGroupById(groupId){
-  const idx = state.groups.findIndex(g => g.id === groupId);
-  if(idx >= 0) showGroup(idx);
-}
-</script>
+    function importData(event) {
+      const file = event.target.files[0];
+      const reader = new FileReader();
+      reader.onload = e => {
+        groups = JSON.parse(e.target.result);
+        renderGroups();
+      };
+      reader.readAsText(file);
+    }
+  </script>
 </body>
 </html>
