@@ -34,7 +34,18 @@
   .part-row{ display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px dashed #eee; }
   .part-row:last-child{ border-bottom:none; }
   #qrFullModal{ display:none; position:fixed; inset:0; background:white; z-index:9999; align-items:center; justify-content:center; flex-direction:column; }
-  #qrCanvas{ width:80vw; height:80vw; max-width:520px; max-height:520px; }
+ #qrCanvas {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 20px auto;
+}
+
+#qrCanvas canvas {
+  max-width: 250px;   /* cap size for mobile */
+  width: 100%;        /* scale down on small screens */
+  height: auto;
+}
   #scannerModal{ display:none; position:fixed; inset:0; background:rgba(0,0,0,0.75); z-index:9999; align-items:center; justify-content:center; }
   #scannerBox{ width:94%; max-width:720px; background:white; border-radius:10px; padding:12px; }
   #debugLog{ margin-top:8px; font-size:13px; color:#111; background:#f8fafc; padding:8px; border-radius:8px; max-height:120px; overflow:auto; }
@@ -583,7 +594,7 @@ function showQRCode(groupId){
   canvas.id = 'qrCanvasEl';
   canvasWrap.appendChild(canvas);
   // generate QR to canvas
-  QRCode.toCanvas(canvas, value, { width: 600 }, function(err){
+  QRCode.toCanvas(canvas, value, { width: 250 }, function(err){
     if(err) console.error(err);
   });
   document.getElementById('qrNameLabel').textContent = g.name;
