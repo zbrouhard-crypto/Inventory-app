@@ -681,30 +681,31 @@ function openScanner(){
 
 /* handle scanned QR value */
 function handleScannedValue(value){
-  // expected format: 'INV-GROUP:<groupId>' (we encode group id)
   if(!value) { logDebug('Empty scan'); return; }
+
+  value = value.trim(); // <-- clean up extra spaces
+  logDebug('Processing value: ' + value);
+
   if(value.startsWith('INV-GROUP:')){
-    const gid = value.split(':')[1];
+    const gid = value.replace('INV-GROUP:', '').trim();  // safer
     const idx = state.groups.findIndex(g => g.id === gid);
     if(idx >= 0){
       stopScanner();
-      logDebug('Navigating to group index ' + idx);
+      logDebug('Navigating to group index ' + idx + ' (ID: ' + gid + ')');
       showGroup(idx);
       showTab('groupDetails');
-      return;
     } else {
-      logDebug('Group ID scanned but not in library: ' + gid);
-      alert('Group scanned but not found in library.');
-      return;
+      logDebug('Group ID not found in state: ' + gid);
+      alert('Group scanned but not found in library. ID: ' + gid);
     }
   } else {
-    // fallback: if someone scanned a QR with group name only
+    // fallback: maybe user scanned a QR with just the group name
     const idxName = state.groups.findIndex(g => g.name === value);
     if(idxName >= 0){
       stopScanner();
+      logDebug('Navigating by group name: ' + value);
       showGroup(idxName);
       showTab('groupDetails');
-      return;
     } else {
       logDebug('Scanned value not recognized: ' + value);
       alert('Scanned value not recognized by this app: ' + value);
