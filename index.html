@@ -640,16 +640,17 @@ function openScanner(){
       alert('Scanner library not loaded.');
       return;
     }
-    // create instance
-    qrScannerInstance = new QrScanner(video, result => {
-      logDebug('QR detected: ' + result);
-      handleScannedValue(result);
-    }, {
-      onDecodeError: error => {
-        // ignore decode errors
-      },
-      returnDetailedScanResult: false
-    });
+   // create instance
+qrScannerInstance = new QrScanner(video, result => {
+  const value = (typeof result === 'string') ? result : result.data;
+  logDebug('QR detected: ' + value);
+  handleScannedValue(value);
+}, {
+  onDecodeError: error => {
+    // ignore decode errors
+  },
+  returnDetailedScanResult: true // <-- important
+});
 
     // start scanner
     QrScanner.hasCamera().then(hasCamera => {
