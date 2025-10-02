@@ -184,6 +184,100 @@ if(window.QrScanner){
 }
 
 /* -------------------------
+   Debug log helper
+---------------------------*/
+function logDebug(msg){
+  const el = document.getElementById('debugLog');
+  if(!el) return;
+  const time = new Date().toLocaleTimeString();
+  el.innerHTML = `<div>[${time}] ${msg}</div>` + el.innerHTML;
+}
+
+/* -------------------------
+   Handle scanned QR value
+---------------------------*/
+function handleScannedValue(value) {
+  logDebug('Handling scanned value: ' + value);
+
+  if (value.startsWith('INV-GROUP:')) {
+    const groupId = value.replace('INV-GROUP:', '').trim();
+    const idx = state.groups.findIndex(g => g.id === groupId);
+
+    if (idx !== -1) {
+      stopScanner();
+      showGroup(idx);
+    } else {
+      alert('Group not found for ID: ' + groupId);
+    }
+  } else {
+    alert('Unrecognized QR code: ' + value);
+  }
+}
+
+/* -------------------------
+   Stop scanner + close modal
+---------------------------*/
+function stopScanner() {
+  if (window.qrScannerInstance) {
+    window.qrScannerInstance.stop();
+    window.qrScannerInstance.destroy();
+    window.qrScannerInstance = null;
+  }
+  document.getElementById('scannerModal').style.display = 'none';
+}
+
+/* -------------------------
+   Open scanner modal and start
+---------------------------*/
+function openScanner(){
+  document.getElementById('scannerModal').style.display = 'flex';
+  document.getElementById('debugLog').innerHTML = '';
+  logDebug('Opening scanner...');
+
+  const wrapper = document.getElementById('qrVideoWrapper');
+  wrapper.innerHTML = '';
+  const video = document.createElement('video');
+  video.style.width = '100%';
+  video.setAttribute('muted','');
+  video.setAttribute('playsinline','');
+  wrapper.appendChild(video);
+
+  try {
+    if(!window.QrScanner){
+      logDebug('QrScanner not available');
+      alert('Scanner library not loaded.');
+      return;
+    }
+
+    window.qrScannerInstance = new QrScanner(video, result => {
+      logDebug('QR detected: ' + result);
+      handleScannedValue(result);
+    }, {
+      onDecodeError: err => {}, // ignore
+      returnDetailedScanResult: false
+    });
+
+    QrScanner.hasCamera().then(hasCamera => {
+      if(!hasCamera) {
+        alert('No camera found.');
+        stopScanner();
+        return;
+      }
+      window.qrScannerInstance.start()
+        .then(()=> logDebug('Camera started'))
+        .catch(err=>{
+          logDebug('Camera start error: ' + err);
+          alert('Camera error: ' + err);
+          stopScanner();
+        });
+    });
+  } catch(err){
+    logDebug('Init error: ' + err);
+    stopScanner();
+  }
+}
+</script>
+/* -------------------------
   Data model & persistence
 ---------------------------*/
 const LS_KEY = 'svc_inventory_v7';
