@@ -681,38 +681,49 @@ function openScanner(){
 
 /* handle scanned QR value */
 function handleScannedValue(value){
-  if(!value) { logDebug('Empty scan'); return; }
+  if(!value) { 
+    logDebug('Empty scan'); 
+    return; 
+  }
 
-  value = value.trim(); // <-- clean up extra spaces
-  logDebug('Processing value: ' + value);
+  logDebug('Scanned raw value: ' + value);
+
+  // Dump all groups for comparison
+  state.groups.forEach(g => {
+    logDebug('Group in state → name: "' + g.name + '" | id: ' + g.id);
+  });
 
   if(value.startsWith('INV-GROUP:')){
-    const gid = value.replace('INV-GROUP:', '').trim();  // safer
+    const gid = value.split(':')[1].trim();
+    logDebug('Extracted groupId: ' + gid);
+
     const idx = state.groups.findIndex(g => g.id === gid);
     if(idx >= 0){
       stopScanner();
-      logDebug('Navigating to group index ' + idx + ' (ID: ' + gid + ')');
+      logDebug('✅ Found group index ' + idx + ' (' + state.groups[idx].name + ')');
       showGroup(idx);
       showTab('groupDetails');
+      return;
     } else {
-      logDebug('Group ID not found in state: ' + gid);
-      alert('Group scanned but not found in library. ID: ' + gid);
+      logDebug('❌ Group ID scanned but not in state: ' + gid);
+      alert('Group scanned but not found in library.');
+      return;
     }
   } else {
-    // fallback: maybe user scanned a QR with just the group name
-    const idxName = state.groups.findIndex(g => g.name === value);
+    // fallback: maybe QR has just the group name
+    const idxName = state.groups.findIndex(g => g.name === value.trim());
     if(idxName >= 0){
       stopScanner();
-      logDebug('Navigating by group name: ' + value);
+      logDebug('✅ Found group by NAME: ' + state.groups[idxName].name);
       showGroup(idxName);
       showTab('groupDetails');
+      return;
     } else {
-      logDebug('Scanned value not recognized: ' + value);
+      logDebug('❌ Scanned value not recognized as ID or name: ' + value);
       alert('Scanned value not recognized by this app: ' + value);
     }
   }
 }
-
 /* stop scanner */
 function stopScanner(){
   if(qrScannerInstance){
