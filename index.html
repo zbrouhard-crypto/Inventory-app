@@ -11,6 +11,8 @@
   <!-- QR code scanner -->
   <script src="https://unpkg.com/qr-scanner/qr-scanner.umd.min.js"></script>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
   <!-- Your app scripts after this -->
   <script src="app.js"></script>
 </head>
@@ -111,37 +113,42 @@
     </div>
   </section>
 
-  <!-- SETTINGS -->
-  <section id="settings" class="card hidden">
-    <h2>Admin & Backup</h2>
+  <!-- SETTINGS --> 
+<section id="settings" class="card hidden">
+  <h2>Admin & Backup</h2>
 
-    <div style="margin-top:10px;">
-      <button class="small-btn" onclick="exportCSV()">📤 Export CSV</button>
-      <div class="small">Download groups & parts (for Excel)</div>
-    </div>
+  <div style="margin-top:10px;">
+    <button class="small-btn" onclick="exportCSV()">📤 Export CSV</button>
+    <div class="small">Download groups & parts (for Excel)</div>
+  </div>
 
-    <div style="margin-top:10px;">
-      <input id="importCsvInput" type="file" accept=".csv" class="hidden" onchange="handleImportCSV(event)">
-      <button class="small-btn" onclick="document.getElementById('importCsvInput').click()">📥 Import CSV</button>
-      <div class="small">Replace all data from a CSV file (wipe & rebuild)</div>
-    </div>
+  <div style="margin-top:10px;">
+    <input id="importCsvInput" type="file" accept=".csv" class="hidden" onchange="handleImportCSV(event)">
+    <button class="small-btn" onclick="document.getElementById('importCsvInput').click()">📥 Import CSV</button>
+    <div class="small">Replace all data from a CSV file (wipe & rebuild)</div>
+  </div>
 
-    <div style="margin-top:10px;">
-      <button class="small-btn" onclick="exportJSON()">📤 Export JSON</button>
-      <div class="small">Download a full JSON backup</div>
-    </div>
+  <div style="margin-top:10px;">
+    <button class="small-btn" onclick="exportJSON()">📤 Export JSON</button>
+    <div class="small">Download a full JSON backup</div>
+  </div>
 
-    <div style="margin-top:10px;">
-      <input id="importJsonInput" type="file" accept=".json" class="hidden" onchange="handleImportJSON(event)">
-      <button class="small-btn" onclick="document.getElementById('importJsonInput').click()">📥 Import JSON</button>
-      <div class="small">Restore full backup (wipe & restore)</div>
-    </div>
+  <div style="margin-top:10px;">
+    <input id="importJsonInput" type="file" accept=".json" class="hidden" onchange="handleImportJSON(event)">
+    <button class="small-btn" onclick="document.getElementById('importJsonInput').click()">📥 Import JSON</button>
+    <div class="small">Restore full backup (wipe & restore)</div>
+  </div>
 
-    <div style="margin-top:14px;">
-      <button class="danger" onclick="clearAllData()">🗑 Clear All Data</button>
-      <div class="small">Double confirmation required</div>
-    </div>
-  </section>
+  <div style="margin-top:10px;">
+    <button class="small-btn" onclick="exportAllQRCodesPDF()">📤 Export All QR Codes (PDF)</button>
+    <div class="small">Download printable QR codes for all groups</div>
+  </div>
+
+  <div style="margin-top:14px;">
+    <button class="danger" onclick="clearAllData()">🗑 Clear All Data</button>
+    <div class="small">Double confirmation required</div>
+  </div>
+</section>
 </main>
 
 <!-- ========================
@@ -916,6 +923,43 @@ window.handleImportJSON = handleImportJSON;
 function showGroupById(groupId){
   const idx = state.groups.findIndex(g => g.id === groupId);
   if(idx >= 0) showGroup(idx);
+}
+
+/* -------------------------
+   Bulk QR Code Export (PDF)
+---------------------------*/
+function exportAllQRCodesPDF(){
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+
+  let x = 10, y = 10; // starting position
+  const qrSize = 40;  // size of each QR code
+  const spacing = 20; // space between codes
+
+  state.groups.forEach((g, idx) => {
+    const value = 'INV-GROUP:' + g.id;
+    const canvas = document.createElement('canvas');
+
+    QRCode.toCanvas(canvas, value, { width: qrSize }, function(err){
+      if(err) return console.error(err);
+
+      const imgData = canvas.toDataURL('image/png');
+      doc.addImage(imgData, 'PNG', x, y, qrSize, qrSize);
+      doc.text(g.name, x, y + qrSize + 6);
+
+      // move position
+      x += qrSize + spacing;
+      if (x > 180) { // wrap to next line
+        x = 10;
+        y += qrSize + 20;
+      }
+
+      // if last group, save the PDF
+      if(idx === state.groups.length - 1){
+        doc.save('inventory-qr-codes.pdf');
+      }
+    });
+  });
 }
 </script>
 </body>
