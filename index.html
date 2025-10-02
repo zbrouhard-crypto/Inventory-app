@@ -43,7 +43,6 @@
   input[type="text"], input[type="number"]{ padding:8px; border-radius:8px; border:1px solid #e5e7eb; width:100%; }
   .controls{ display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; }
 </style>
-</head>
 <body>
 
 <header>
@@ -277,6 +276,8 @@ function openScanner(){
   }
 }
 </script>
+
+<script>
 /* -------------------------
   Data model & persistence
 ---------------------------*/
@@ -305,7 +306,9 @@ function saveState(){
   localStorage.setItem(LS_KEY, JSON.stringify(state));
   updateBackupBadge();
 }
+</script>
 
+<script>
 /* -------------------------
   Navigation & rendering
 ---------------------------*/
